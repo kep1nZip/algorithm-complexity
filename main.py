@@ -18,26 +18,36 @@ st.set_page_config(
 
 # ==================== ALGORITMA LINEAR SEARCH ====================
 
-def linear_search_iteratif(products: List[str], keyword: str) -> Tuple[int, int]:
-    """
-    Linear Search versi Iteratif
-    Returns: (index, jumlah perbandingan)
-    """
+def linear_search_iteratif(products: List[str], keyword: str, mode: str = "first") -> Tuple:
     comparisons = 0
     keyword_lower = keyword.lower()
     
-    for i in range(len(products)):
-        comparisons += 1
-        if keyword_lower in products[i].lower():
-            return i, comparisons
+    if mode == "first":
+        # Mode: cari pertama ditemukan
+        for i in range(len(products)):
+            comparisons += 1
+            if keyword_lower in products[i].lower():
+                return i, comparisons
+        
+        return -1, comparisons
     
-    return -1, comparisons
+    elif mode == "all":
+        # Mode: cari semua produk
+        found_indexes = []
+        found_products = []
+        
+        for i in range(len(products)):
+            comparisons += 1
+            if keyword_lower in products[i].lower():
+                found_indexes.append(i)
+                found_products.append(products[i])
+        
+        return found_indexes, comparisons, found_products
+    
+    else:
+        raise ValueError("Mode harus 'first' atau 'all'")
 
 def linear_search_rekursif(products: List[str], keyword: str, index: int = 0, comparisons: int = 0) -> Tuple[int, int]:
-    """
-    Linear Search versi Rekursif
-    Returns: (index, jumlah perbandingan)
-    """
     # Base case: mencapai akhir list
     if index >= len(products):
         return -1, comparisons
@@ -52,34 +62,26 @@ def linear_search_rekursif(products: List[str], keyword: str, index: int = 0, co
     # Recursive case
     return linear_search_rekursif(products, keyword, index + 1, comparisons)
 
-def linear_search_all_products_iteratif(products: List[str], keyword: str) -> Tuple[List[int], int, List[str]]:
-    """
-    Linear Search untuk mencari SEMUA produk dengan keyword
-    Returns: (list_indexes, total_comparisons, found_products)
-    """
-    comparisons = 0
-    keyword_lower = keyword.lower()
-    found_indexes = []
-    found_products = []
-    
-    for i in range(len(products)):
-        comparisons += 1
-        if keyword_lower in products[i].lower():
-            found_indexes.append(i)
-            found_products.append(products[i])
-    
-    return found_indexes, comparisons, found_products
+# ==================== GENERATOR DATA DENGAN KONSISTENSI ====================
 
-# ==================== GENERATOR DATA ====================
-
-def generate_product_names(n: int) -> List[str]:
-    """Generate nama produk dummy untuk testing"""
+def generate_product_names(n: int, seed: int = None) -> List[str]:
+    """
+    Generate nama produk dummy untuk testing
+    Dengan optional seed untuk hasil yang konsisten
+    """
     categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
                   'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
     brands = ['Samsung', 'Apple', 'Asus', 'Lenovo', 'HP', 'Dell', 'Sony', 
               'Xiaomi', 'Oppo', 'Vivo', 'Logitech', 'JBL']
     adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
                   'Portable', 'Professional', 'Advanced', 'Smart']
+    
+    # Simpan state random original
+    original_state = random.getstate()
+    
+    # Set seed jika diberikan
+    if seed is not None:
+        random.seed(seed)
     
     products = []
     for i in range(n):
@@ -90,6 +92,10 @@ def generate_product_names(n: int) -> List[str]:
         
         product = f"{brand} {category} {adjective} {model}"
         products.append(product)
+    
+    # Kembalikan ke state random original
+    if seed is not None:
+        random.setstate(original_state)
     
     return products
 
@@ -165,7 +171,7 @@ def create_search_timeline_visualization(products: List[str], keyword: str, foun
             'Index': i,
             'Match': is_match,
             'Product': products[i][:30] + '...' if len(products[i]) > 30 else products[i],
-            'Time': random.uniform(0.01, 0.05)
+            'Time': 0.02 + (0.01 if is_match else 0)  # Waktu konsisten
         })
     
     df_steps = pd.DataFrame(steps)
@@ -361,12 +367,13 @@ def create_complexity_table():
 
 # ==================== PERFORMANCE TEST ====================
 
-def run_performance_test(sizes: List[int], keyword: str = "Gaming") -> pd.DataFrame:
+def run_performance_test(sizes: List[int], keyword: str = "Gaming", seed: int = None) -> pd.DataFrame:
     """Menjalankan pengujian performa pada berbagai ukuran dataset"""
     results = []
     
     for size in sizes:
-        products = generate_product_names(size)
+        # Generate produk dengan seed yang sama untuk konsistensi
+        products = generate_product_names(size, seed)
         
         # Best case: keyword di awal
         products_best = products.copy()
@@ -385,17 +392,17 @@ def run_performance_test(sizes: List[int], keyword: str = "Gaming") -> pd.DataFr
         
         # Test Iteratif - Best Case
         start = time.perf_counter()
-        idx_iter_best, comp_iter_best = linear_search_iteratif(products_best, keyword)
+        idx_iter_best, comp_iter_best = linear_search_iteratif(products_best, keyword, mode="first")
         time_iter_best = (time.perf_counter() - start) * 1000
         
         # Test Iteratif - Worst Case
         start = time.perf_counter()
-        idx_iter_worst, comp_iter_worst = linear_search_iteratif(products_worst, keyword)
+        idx_iter_worst, comp_iter_worst = linear_search_iteratif(products_worst, keyword, mode="first")
         time_iter_worst = (time.perf_counter() - start) * 1000
         
         # Test Iteratif - Average Case
         start = time.perf_counter()
-        idx_iter_avg, comp_iter_avg = linear_search_iteratif(products_avg, keyword)
+        idx_iter_avg, comp_iter_avg = linear_search_iteratif(products_avg, keyword, mode="first")
         time_iter_avg = (time.perf_counter() - start) * 1000
         
         # Test Rekursif - Best Case
@@ -497,6 +504,25 @@ def main():
         num_products = st.slider("Jumlah Produk", 10, 500, 100)
         keyword = st.text_input("Keyword Pencarian", "Gaming")
         
+        st.markdown("### 🔧 Pengaturan Data")
+        
+        # Checkbox untuk data konsisten
+        use_consistent_data = st.checkbox(
+            "🔒 Gunakan Data Konsisten", 
+            value=True,
+            help="Jika dicentang, hasil pencarian akan sama setiap kali"
+        )
+        
+        # Input seed jika menggunakan data konsisten
+        data_seed = 42  # Default seed
+        if use_consistent_data:
+            data_seed = st.number_input(
+                "Seed Data", 
+                value=42, 
+                min_value=0,
+                help="Angka seed untuk generator random (gunakan angka yang sama untuk hasil yang sama)"
+            )
+        
         st.markdown("---")
         st.markdown("### 📊 Mode Testing")
         test_sizes = st.multiselect(
@@ -522,6 +548,11 @@ def main():
         2. **Visualisasi hasil** pencarian
         3. **Analisis performa** iteratif vs rekursif
         4. **Analisis kompleksitas** asimtotik
+        
+        **🔧 Fitur Baru:** Data Konsisten
+        - Hasil sama setiap kali dengan seed yang sama
+        - Cocok untuk demo dan presentasi
+        - Tetap bisa acak jika tidak dicentang
         """)
     
     # Container utama
@@ -531,7 +562,7 @@ def main():
         # ===== BAGIAN 1: DEMO PENCARIAN =====
         st.header("🎯 Demo Pencarian Produk")
         
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2 = st.columns([3, 1])
         
         with col1:
             search_type = st.radio(
@@ -543,16 +574,35 @@ def main():
         with col2:
             demo_button = st.button("🚀 Jalankan Pencarian", type="primary", use_container_width=True)
         
-        with col3:
-            if demo_button:
-                st.balloons()
-        
         if demo_button:
-            # Generate produk
-            products = generate_product_names(num_products)
+            # Generate produk dengan atau tanpa seed
+            seed_to_use = data_seed if use_consistent_data else None
+            products = generate_product_names(num_products, seed_to_use)
             
-            # Cari semua produk dengan keyword
-            all_found_indices, total_comparisons, all_found_products = linear_search_all_products_iteratif(products, keyword)
+            # Tampilkan info seed
+            if use_consistent_data:
+                st.info(f"🔧 **Data konsisten dengan seed:** `{data_seed}`")
+            
+            # Tentukan mode berdasarkan pilihan user
+            if search_type == "🔍 Cari Pertama Ditemukan":
+                mode = "first"
+                st.info("**Mode: Cari Pertama Ditemukan** - Berhenti saat menemukan produk pertama")
+            else:
+                mode = "all"
+                st.info("**Mode: Cari SEMUA Produk** - Mencari semua produk yang sesuai")
+            
+            # Jalankan pencarian sesuai mode
+            if mode == "first":
+                # Mode pertama ditemukan
+                found_index, comparisons = linear_search_iteratif(products, keyword, mode="first")
+                
+                # Untuk menghitung total produk yang mengandung keyword (hanya untuk info)
+                all_indices, total_comparisons, all_products = linear_search_iteratif(products, keyword, mode="all")
+                total_found = len(all_products)
+            else:
+                # Mode semua produk
+                found_indices, comparisons, found_products = linear_search_iteratif(products, keyword, mode="all")
+                total_found = len(found_products)
             
             # Tampilkan hasil pencarian
             with st.expander("📋 Hasil Pencarian", expanded=True):
@@ -562,34 +612,59 @@ def main():
                     st.metric("Total Produk", num_products)
                 
                 with col_result2:
-                    st.metric("Ditemukan", len(all_found_products))
+                    st.metric("Total Ditemukan", total_found)
                 
                 with col_result3:
-                    st.metric("Persentase", f"{(len(all_found_products)/num_products*100):.1f}%")
+                    percentage = (total_found/num_products*100) if num_products > 0 else 0
+                    st.metric("Persentase", f"{percentage:.1f}%")
                 
-                if all_found_products:
-                    st.success(f"✅ Ditemukan {len(all_found_products)} produk mengandung '{keyword}'")
-                    for idx, (pos, product) in enumerate(zip(all_found_indices, all_found_products)):
-                        with st.container():
-                            st.markdown(f"**🎯 #{idx+1}** - Index {pos}: {product}")
-                            st.divider()
+                if mode == "first":
+                    if found_index != -1:
+                        st.success(f"✅ **Produk pertama ditemukan di index:** {found_index}")
+                        st.markdown(f"**🎯 Produk:** {products[found_index]}")
+                        st.metric("Jumlah Perbandingan", comparisons)
+                        st.caption("ℹ️ Mode 'Cari Pertama' berhenti setelah menemukan produk pertama")
+                    else:
+                        st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
                 else:
-                    st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
+                    if found_products:
+                        st.success(f"✅ Ditemukan {len(found_products)} produk mengandung '{keyword}'")
+                        st.metric("Jumlah Perbandingan", comparisons)
+                        st.caption(f"ℹ️ Mode 'Cari Semua' melakukan {comparisons} perbandingan (cek semua produk)")
+                        
+                        for idx, (pos, product) in enumerate(zip(found_indices, found_products)):
+                            with st.container():
+                                st.markdown(f"**🎯 #{idx+1}** - Index {pos}: {product}")
+                                st.divider()
+                    else:
+                        st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
             
             # ===== VISUALISASI HASIL PENCARIAN =====
-            if "📊 Distribusi Hasil" in show_viz and all_found_indices:
+            if "📊 Distribusi Hasil" in show_viz:
                 st.markdown("---")
                 st.header("📊 Visualisasi Hasil Pencarian")
                 
-                col_viz1, col_viz2 = st.columns(2)
+                # Tentukan indeks untuk visualisasi
+                if mode == "first":
+                    if found_index != -1:
+                        viz_indices = [found_index]
+                    else:
+                        viz_indices = []
+                else:
+                    viz_indices = found_indices
                 
-                with col_viz1:
-                    fig_dist = create_search_progress_visualization(products, keyword, all_found_indices)
-                    st.plotly_chart(fig_dist, use_container_width=True)
-                
-                with col_viz2:
-                    fig_timeline = create_search_timeline_visualization(products, keyword, all_found_indices)
-                    st.plotly_chart(fig_timeline, use_container_width=True)
+                if viz_indices:
+                    col_viz1, col_viz2 = st.columns(2)
+                    
+                    with col_viz1:
+                        fig_dist = create_search_progress_visualization(products, keyword, viz_indices)
+                        st.plotly_chart(fig_dist, use_container_width=True)
+                    
+                    with col_viz2:
+                        fig_timeline = create_search_timeline_visualization(products, keyword, viz_indices)
+                        st.plotly_chart(fig_timeline, use_container_width=True)
+                else:
+                    st.warning("Tidak ada produk yang ditemukan untuk divisualisasikan")
             
             # ===== PERBANDINGAN ALGORITMA =====
             st.markdown("---")
@@ -600,7 +675,8 @@ def main():
             with col_algo1:
                 st.subheader("🔄 Linear Search Iteratif")
                 start = time.perf_counter()
-                idx_iter, comp_iter = linear_search_iteratif(products, keyword)
+                # Gunakan mode="first" untuk mencari pertama ditemukan
+                idx_iter, comp_iter = linear_search_iteratif(products, keyword, mode="first")
                 time_iter = (time.perf_counter() - start) * 1000
                 
                 if idx_iter != -1:
@@ -652,11 +728,21 @@ def main():
         st.markdown("---")
         st.header("📊 Performance Testing")
         
-        test_button = st.button("⚡ Jalankan Performance Test", type="secondary", use_container_width=True)
+        col_test1, col_test2 = st.columns([3, 1])
+        
+        with col_test2:
+            test_button = st.button("⚡ Jalankan Performance Test", type="secondary", use_container_width=True)
         
         if test_button and test_sizes:
+            # Gunakan seed yang sama untuk konsistensi
+            seed_to_use = data_seed if use_consistent_data else None
+            
             with st.spinner("Menjalankan performance test..."):
-                df_results = run_performance_test(sorted(test_sizes), keyword)
+                df_results = run_performance_test(sorted(test_sizes), keyword, seed_to_use)
+            
+            # Tampilkan info konsistensi
+            if use_consistent_data:
+                st.info(f"📊 **Performance test menggunakan seed:** `{data_seed}`")
             
             # Tampilkan grafik performa
             fig_perf = create_performance_chart(df_results)
