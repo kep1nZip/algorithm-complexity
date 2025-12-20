@@ -16,58 +16,64 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== ALGORITMA LINEAR SEARCH ====================
+# ==================== ALGORITMA LINEAR SEARCH (VERSI SINGKAT) ====================
 
 def linear_search_iteratif(products: List[str], keyword: str, mode: str = "first") -> Tuple:
+    """
+    Linear Search versi iteratif
+    Operasi dasar: perbandingan (comparisons)
+    """
     comparisons = 0
     keyword_lower = keyword.lower()
     
     if mode == "first":
-        # Mode: cari pertama ditemukan
+        # Cari pertama ditemukan
         for i in range(len(products)):
-            comparisons += 1
+            comparisons += 1  # ⭐ OPERASI DASAR
             if keyword_lower in products[i].lower():
-                return i, comparisons
+                return i, comparisons  # Found
         
-        return -1, comparisons
+        return -1, comparisons  # Not found
     
-    elif mode == "all":
-        # Mode: cari semua produk
+    else:  # mode == "all"
+        # Cari semua produk
         found_indexes = []
         found_products = []
         
         for i in range(len(products)):
-            comparisons += 1
+            comparisons += 1  # ⭐ OPERASI DASAR
             if keyword_lower in products[i].lower():
                 found_indexes.append(i)
                 found_products.append(products[i])
         
         return found_indexes, comparisons, found_products
-    
-    else:
-        raise ValueError("Mode harus 'first' atau 'all'")
 
 def linear_search_rekursif(products: List[str], keyword: str, index: int = 0, comparisons: int = 0) -> Tuple[int, int]:
-    # Base case: mencapai akhir list
+    """
+    Linear Search versi rekursif
+    Operasi dasar: perbandingan (comparisons)
+    """
+    # Base case: akhir array
     if index >= len(products):
-        return -1, comparisons
+        return -1, comparisons  # Not found
     
-    comparisons += 1
+    comparisons += 1  # ⭐ OPERASI DASAR
     keyword_lower = keyword.lower()
     
-    # Base case: keyword ditemukan
+    # Base case: ditemukan
     if keyword_lower in products[index].lower():
-        return index, comparisons
+        return index, comparisons  # Found
     
     # Recursive case
     return linear_search_rekursif(products, keyword, index + 1, comparisons)
 
-# ==================== GENERATOR DATA DENGAN KONSISTENSI ====================
+# ==================== GENERATOR DATA ====================
 
-def generate_product_names(n: int, seed: int = None) -> List[str]:
+def generate_product_names(n: int, consistent: bool = False) -> List[str]:
     """
     Generate nama produk dummy untuk testing
-    Dengan optional seed untuk hasil yang konsisten
+    - consistent=True: hasil sama setiap kali (untuk demo/presentasi)
+    - consistent=False: hasil random (untuk testing real)
     """
     categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
                   'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
@@ -76,12 +82,9 @@ def generate_product_names(n: int, seed: int = None) -> List[str]:
     adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
                   'Portable', 'Professional', 'Advanced', 'Smart']
     
-    # Simpan state random original
-    original_state = random.getstate()
-    
-    # Set seed jika diberikan
-    if seed is not None:
-        random.seed(seed)
+    # Gunakan seed tetap jika ingin konsisten
+    if consistent:
+        random.seed(42)  # Seed tetap untuk hasil yang sama
     
     products = []
     for i in range(n):
@@ -93,120 +96,7 @@ def generate_product_names(n: int, seed: int = None) -> List[str]:
         product = f"{brand} {category} {adjective} {model}"
         products.append(product)
     
-    # Kembalikan ke state random original
-    if seed is not None:
-        random.setstate(original_state)
-    
     return products
-
-# ==================== VISUALISASI HASIL PENCARIAN ====================
-
-def create_search_progress_visualization(products: List[str], keyword: str, found_indices: List[int]):
-    """Buat visualisasi proses pencarian yang keren"""
-    n = len(products)
-    
-    # Buat data untuk visualisasi
-    is_found = [1 if i in found_indices else 0 for i in range(n)]
-    colors = ['#FF6B6B' if found else '#4ECDC4' for found in is_found]
-    
-    fig = go.Figure()
-    
-    # Tambah bar chart untuk semua produk
-    fig.add_trace(go.Bar(
-        x=list(range(n)),
-        y=[1] * n,
-        marker_color=colors,
-        opacity=0.7,
-        name='Produk',
-        hovertext=products,
-        hovertemplate='<b>Index %{x}</b><br>%{hovertext}<br>Status: %{customdata}',
-        customdata=['✅ Ditemukan' if i in found_indices else '❌ Tidak Ditemukan' for i in range(n)]
-    ))
-    
-    # Tambah scatter plot untuk highlight produk yang ditemukan
-    if found_indices:
-        fig.add_trace(go.Scatter(
-            x=found_indices,
-            y=[1.2] * len(found_indices),
-            mode='markers+text',
-            marker=dict(size=15, color='#FFD93D', symbol='star'),
-            text=['★'] * len(found_indices),
-            textposition='top center',
-            name='Keyword Ditemukan',
-            hoverinfo='skip'
-        ))
-    
-    # Tambah garis untuk menunjukkan proses pencarian linear
-    fig.add_trace(go.Scatter(
-        x=[-1, n],
-        y=[0.5, 0.5],
-        mode='lines',
-        line=dict(color='#6C5B7B', width=3, dash='dash'),
-        name='Alur Pencarian Linear'
-    ))
-    
-    fig.update_layout(
-        title=f'📊 Visualisasi Distribusi Hasil Pencarian: "{keyword}"',
-        xaxis_title='Index Produk',
-        yaxis=dict(showticklabels=False, range=[0, 1.5]),
-        showlegend=True,
-        height=400,
-        template='plotly_white',
-        bargap=0.1,
-        hovermode='closest'
-    )
-    
-    return fig
-
-def create_search_timeline_visualization(products: List[str], keyword: str, found_indices: List[int]):
-    """Buat visualisasi timeline pencarian"""
-    n = len(products)
-    
-    # Data untuk timeline
-    steps = []
-    for i in range(min(n, 30)):  # Batasi untuk kejelasan
-        is_match = keyword.lower() in products[i].lower()
-        steps.append({
-            'Step': i + 1,
-            'Index': i,
-            'Match': is_match,
-            'Product': products[i][:30] + '...' if len(products[i]) > 30 else products[i],
-            'Time': 0.02 + (0.01 if is_match else 0)  # Waktu konsisten
-        })
-    
-    df_steps = pd.DataFrame(steps)
-    
-    fig = go.Figure()
-    
-    # Timeline dengan gradient color
-    fig.add_trace(go.Scatter(
-        x=df_steps['Step'],
-        y=df_steps['Time'] * 1000,
-        mode='lines+markers',
-        line=dict(color='#355C7D', width=3),
-        marker=dict(
-            size=10,
-            color=df_steps['Match'].map({True: '#C06C84', False: '#F8B195'}),
-            symbol=df_steps['Match'].map({True: 'star', False: 'circle'}),
-            line=dict(width=2, color='white')
-        ),
-        name='Proses Pencarian',
-        hovertext=df_steps['Product'],
-        hovertemplate='<b>Step %{x}</b><br>Index: %{customdata}<br>Waktu: %{y:.2f} ms<br>%{hovertext}<br>Status: %{text}',
-        customdata=df_steps['Index'],
-        text=df_steps['Match'].map({True: '✅ Match', False: '❌ No Match'})
-    ))
-    
-    fig.update_layout(
-        title='⏱️ Timeline Proses Pencarian Per Step',
-        xaxis_title='Langkah Pencarian',
-        yaxis_title='Waktu Eksekusi (ms)',
-        height=400,
-        template='plotly_white',
-        hovermode='closest'
-    )
-    
-    return fig
 
 # ==================== VISUALISASI ASIMTOTIK ====================
 
@@ -367,13 +257,13 @@ def create_complexity_table():
 
 # ==================== PERFORMANCE TEST ====================
 
-def run_performance_test(sizes: List[int], keyword: str = "Gaming", seed: int = None) -> pd.DataFrame:
+def run_performance_test(sizes: List[int], keyword: str = "Gaming", consistent: bool = False) -> pd.DataFrame:
     """Menjalankan pengujian performa pada berbagai ukuran dataset"""
     results = []
     
     for size in sizes:
-        # Generate produk dengan seed yang sama untuk konsistensi
-        products = generate_product_names(size, seed)
+        # Generate produk
+        products = generate_product_names(size, consistent)
         
         # Best case: keyword di awal
         products_best = products.copy()
@@ -494,7 +384,7 @@ def create_performance_chart(df: pd.DataFrame):
 
 def main():
     st.title("🔍 Analisis Linear Search Marketplace")
-    st.markdown("### Demo Pencarian + Visualisasi Hasil + Analisis Asimtotik")
+    st.markdown("### Demo Pencarian + Analisis Asimtotik + Performance Testing")
     
     # Sidebar untuk pengaturan
     with st.sidebar:
@@ -504,55 +394,51 @@ def main():
         num_products = st.slider("Jumlah Produk", 10, 500, 100)
         keyword = st.text_input("Keyword Pencarian", "Gaming")
         
-        st.markdown("### 🔧 Pengaturan Data")
+        st.markdown("### 🔧 Tipe Data")
         
-        # Checkbox untuk data konsisten
-        use_consistent_data = st.checkbox(
-            "🔒 Gunakan Data Konsisten", 
-            value=True,
-            help="Jika dicentang, hasil pencarian akan sama setiap kali"
+        # Pilihan sederhana untuk tipe data
+        data_type = st.radio(
+            "Pilih Tipe Data:",
+            ["🎲 Data Random (Realistic)", "🔒 Data Konsisten (Presentasi)"],
+            help="""
+            🎲 Data Random: Hasil berbeda setiap kali (seperti dunia nyata)
+            🔒 Data Konsisten: Hasil sama setiap kali (cocok untuk demo/kelas)
+            """
         )
         
-        # Input seed jika menggunakan data konsisten
-        data_seed = 42  # Default seed
-        if use_consistent_data:
-            data_seed = st.number_input(
-                "Seed Data", 
-                value=42, 
-                min_value=0,
-                help="Angka seed untuk generator random (gunakan angka yang sama untuk hasil yang sama)"
-            )
+        use_consistent_data = (data_type == "🔒 Data Konsisten (Presentasi)")
         
         st.markdown("---")
-        st.markdown("### 📊 Mode Testing")
+        
+        st.markdown("### 📊 Performance Testing")
+        
         test_sizes = st.multiselect(
-            "Ukuran Dataset untuk Testing",
-            [50, 100, 500, 1000, 5000],
-            default=[100, 500, 1000]
+            "Pilih Ukuran Dataset untuk Testing:",
+            [10, 50, 100, 500, 1000, 5000],
+            default=[10, 50, 100, 500, 1000],
+            help="Performance test otomatis berjalan dengan ukuran ini"
         )
         
         st.markdown("---")
         st.markdown("### 🎨 Tampilkan Visualisasi")
         show_viz = st.multiselect(
-            "Pilih Visualisasi",
-            ["📊 Distribusi Hasil", "⏱️ Timeline", "📈 Grafik Asimtotik", 
-             "🔍 Kompleksitas Linear", "📋 Tabel Kompleksitas"],
-            default=["📊 Distribusi Hasil", "📈 Grafik Asimtotik"]
+            "Pilih Visualisasi:",
+            ["📈 Grafik Asimtotik", "🔍 Kompleksitas Linear", "📋 Tabel Kompleksitas"],
+            default=["📈 Grafik Asimtotik", "🔍 Kompleksitas Linear"]
         )
         
         st.markdown("---")
         st.markdown("**ℹ️ Tentang Aplikasi**")
         st.info("""
-        Aplikasi ini menunjukkan:
-        1. **Demo Linear Search** produk marketplace
-        2. **Visualisasi hasil** pencarian
-        3. **Analisis performa** iteratif vs rekursif
-        4. **Analisis kompleksitas** asimtotik
+        **🔍 Fitur Utama:**
+        1. **Demo Linear Search** - Cari produk marketplace
+        2. **Performance Testing** - Otomatis berjalan
+        3. **Analisis Asimtotik** - Visualisasi Big O
         
-        **🔧 Fitur Baru:** Data Konsisten
-        - Hasil sama setiap kali dengan seed yang sama
-        - Cocok untuk demo dan presentasi
-        - Tetap bisa acak jika tidak dicentang
+        **⚡ Operasi Dasar:** 
+        - `comparisons += 1` (perbandingan)
+        - Dilakukan 1 sampai n kali
+        - Menentukan kompleksitas O(n)
         """)
     
     # Container utama
@@ -566,22 +452,32 @@ def main():
         
         with col1:
             search_type = st.radio(
-                "Tipe Pencarian",
+                "Tipe Pencarian:",
                 ["🔍 Cari Pertama Ditemukan", "📋 Cari SEMUA Produk"],
                 horizontal=True
             )
         
         with col2:
-            demo_button = st.button("🚀 Jalankan Pencarian", type="primary", use_container_width=True)
+            demo_button = st.button("🚀 Jalankan Demo", type="primary", use_container_width=True)
+        
+        # State untuk melacak apakah demo telah dijalankan
+        demo_run = False
         
         if demo_button:
-            # Generate produk dengan atau tanpa seed
-            seed_to_use = data_seed if use_consistent_data else None
-            products = generate_product_names(num_products, seed_to_use)
+            demo_run = True
             
-            # Tampilkan info seed
+            # ===== DEMO PENCARIAN =====
+            st.markdown("---")
+            st.subheader("📋 Hasil Pencarian")
+            
+            # Tampilkan info tipe data
             if use_consistent_data:
-                st.info(f"🔧 **Data konsisten dengan seed:** `{data_seed}`")
+                st.info("🔧 **Mode Data:** Konsisten (hasil sama setiap kali - cocok untuk presentasi)")
+            else:
+                st.info("🎲 **Mode Data:** Random (hasil berbeda setiap kali - seperti dunia nyata)")
+            
+            # Generate produk
+            products = generate_product_names(num_products, use_consistent_data)
             
             # Tentukan mode berdasarkan pilihan user
             if search_type == "🔍 Cari Pertama Ditemukan":
@@ -605,7 +501,7 @@ def main():
                 total_found = len(found_products)
             
             # Tampilkan hasil pencarian
-            with st.expander("📋 Hasil Pencarian", expanded=True):
+            with st.expander("📊 Detail Hasil Pencarian", expanded=True):
                 col_result1, col_result2, col_result3 = st.columns(3)
                 
                 with col_result1:
@@ -638,33 +534,6 @@ def main():
                                 st.divider()
                     else:
                         st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
-            
-            # ===== VISUALISASI HASIL PENCARIAN =====
-            if "📊 Distribusi Hasil" in show_viz:
-                st.markdown("---")
-                st.header("📊 Visualisasi Hasil Pencarian")
-                
-                # Tentukan indeks untuk visualisasi
-                if mode == "first":
-                    if found_index != -1:
-                        viz_indices = [found_index]
-                    else:
-                        viz_indices = []
-                else:
-                    viz_indices = found_indices
-                
-                if viz_indices:
-                    col_viz1, col_viz2 = st.columns(2)
-                    
-                    with col_viz1:
-                        fig_dist = create_search_progress_visualization(products, keyword, viz_indices)
-                        st.plotly_chart(fig_dist, use_container_width=True)
-                    
-                    with col_viz2:
-                        fig_timeline = create_search_timeline_visualization(products, keyword, viz_indices)
-                        st.plotly_chart(fig_timeline, use_container_width=True)
-                else:
-                    st.warning("Tidak ada produk yang ditemukan untuk divisualisasikan")
             
             # ===== PERBANDINGAN ALGORITMA =====
             st.markdown("---")
@@ -723,30 +592,91 @@ def main():
                     if time_iter > 0 and time_rek > 0:
                         speedup = max(time_rek, time_iter) / min(time_rek, time_iter)
                         st.metric("Speedup", f"{speedup:.2f}x")
-        
-        # ===== BAGIAN 2: PERFORMANCE TESTING =====
-        st.markdown("---")
-        st.header("📊 Performance Testing")
-        
-        col_test1, col_test2 = st.columns([3, 1])
-        
-        with col_test2:
-            test_button = st.button("⚡ Jalankan Performance Test", type="secondary", use_container_width=True)
-        
-        if test_button and test_sizes:
-            # Gunakan seed yang sama untuk konsistensi
-            seed_to_use = data_seed if use_consistent_data else None
             
-            with st.spinner("Menjalankan performance test..."):
-                df_results = run_performance_test(sorted(test_sizes), keyword, seed_to_use)
+            # ===== PENJELASAN OPERASI DASAR =====
+            st.markdown("---")
+            st.header("⚡ Analisis Operasi Dasar")
             
-            # Tampilkan info konsistensi
-            if use_consistent_data:
-                st.info(f"📊 **Performance test menggunakan seed:** `{data_seed}`")
+            col_expl1, col_expl2 = st.columns(2)
+            
+            with col_expl1:
+                st.markdown("### 🎯 Operasi Dasar: PERBANDINGAN")
+                st.code("""
+# Linear Search Iteratif
+for i in range(len(products)):
+    comparisons += 1          # ⭐ OPERASI DASAR
+    if keyword in products[i]:
+        return i              # Found
+    
+# Linear Search Rekursif
+if index >= len(products):
+    return -1                 # Not found
+    
+comparisons += 1              # ⭐ OPERASI DASAR
+if keyword in products[index]:
+    return index              # Found
+                """, language="python")
+            
+            with col_expl2:
+                st.markdown("### 📊 Analisis Kompleksitas")
+                
+                cases_data = {
+                    'Kasus': ['Best Case', 'Average Case', 'Worst Case'],
+                    'Perbandingan': [1, f"n/2 = {num_products//2}", f"n = {num_products}"],
+                    'Big O': ['O(1)', 'O(n)', 'O(n)'],
+                    'Deskripsi': [
+                        'Keyword ditemukan di elemen pertama',
+                        'Keyword ditemukan di tengah array',
+                        'Keyword tidak ada atau di elemen terakhir'
+                    ]
+                }
+                
+                df_cases = pd.DataFrame(cases_data)
+                st.dataframe(df_cases, use_container_width=True, hide_index=True)
+        
+        # ===== BAGIAN 2: PERFORMANCE TESTING (OTOMATIS) =====
+        if demo_run and test_sizes:
+            st.markdown("---")
+            st.header("📊 Performance Testing (Auto-run)")
+            
+            # Jalankan performance test otomatis
+            with st.spinner(f"Menjalankan performance test pada {len(test_sizes)} ukuran dataset..."):
+                df_results = run_performance_test(sorted(test_sizes), keyword, use_consistent_data)
+            
+            # Tampilkan info
+            st.success(f"✅ Performance test selesai! Menguji {len(test_sizes)} ukuran dataset")
             
             # Tampilkan grafik performa
             fig_perf = create_performance_chart(df_results)
             st.plotly_chart(fig_perf, use_container_width=True)
+            
+            # Tampilkan insights
+            st.markdown("### 🔍 Insights dari Hasil Testing:")
+            
+            insights_col1, insights_col2 = st.columns(2)
+            
+            with insights_col1:
+                # Analisis iteratif
+                if len(df_results) > 1:
+                    first_time = df_results.iloc[0]['Iteratif Worst (ms)']
+                    last_time = df_results.iloc[-1]['Iteratif Worst (ms)']
+                    growth_factor = last_time / first_time if first_time > 0 else 0
+                    
+                    st.metric(
+                        "Pertumbuhan Waktu (Iteratif)",
+                        f"{growth_factor:.1f}x",
+                        help=f"Dari {df_results.iloc[0]['Ukuran Data']} ke {df_results.iloc[-1]['Ukuran Data']} produk"
+                    )
+            
+            with insights_col2:
+                # Analisis rekursif
+                rek_times = df_results['Rekursif Worst (ms)'].dropna()
+                if len(rek_times) > 1:
+                    st.metric(
+                        "Rekursif Berhasil",
+                        f"{len(rek_times)}/{len(df_results)} ukuran",
+                        help="Jumlah ukuran data yang berhasil diuji dengan rekursif"
+                    )
             
             # Tampilkan tabel data
             with st.expander("📋 Data Lengkap Hasil Testing"):
@@ -763,35 +693,31 @@ def main():
         Analisis asimtotik digunakan untuk menganalisis **perilaku waktu eksekusi algoritma** 
         ketika ukuran input bertambah sangat besar (n → ∞). **Notasi Big O** menggambarkan 
         **batas atas (upper bound)** dari pertumbuhan fungsi waktu.
+        
+        **⚡ Operasi Dasar Linear Search:**
+        - `comparisons += 1` (perbandingan)
+        - Dilakukan 1 sampai n kali
+        - Menentukan kompleksitas O(n)
         """)
         
         # Tampilkan visualisasi yang dipilih
-        viz_cols = st.columns(2)
-        
-        if "📈 Grafik Asimtotik" in show_viz:
-            with viz_cols[0]:
-                fig_asymptotic = create_asymptotic_comparison_chart()
-                st.plotly_chart(fig_asymptotic, use_container_width=True)
-        
-        if "🔍 Kompleksitas Linear" in show_viz:
-            with viz_cols[1]:
-                fig_linear_comp = create_linear_search_complexity_chart()
-                st.plotly_chart(fig_linear_comp, use_container_width=True)
-        
-        if "📋 Tabel Kompleksitas" in show_viz:
-            st.markdown("### 📋 Tabel Perbandingan Nilai Kompleksitas")
-            df_complexity = create_complexity_table()
-            st.dataframe(df_complexity, use_container_width=True)
+        if show_viz:
+            viz_cols = st.columns(2)
             
-            st.markdown("""
-            **📝 Interpretasi Tabel:**
-            - **O(1)**: Selalu konstan, tidak peduli n
-            - **O(log n)**: Tumbuh sangat lambat
-            - **O(n)**: Linear Search - tumbuh proporsional dengan n
-            - **O(n²)**: Tumbuh cepat, untuk n=1000 butuh 1 juta operasi
-            - **O(2ⁿ)**: Eksponensial - sangat cepat membesar
-            - **O(n!)**: Faktorial - paling cepat membesar
-            """)
+            if "📈 Grafik Asimtotik" in show_viz:
+                with viz_cols[0]:
+                    fig_asymptotic = create_asymptotic_comparison_chart()
+                    st.plotly_chart(fig_asymptotic, use_container_width=True)
+            
+            if "🔍 Kompleksitas Linear" in show_viz:
+                with viz_cols[1]:
+                    fig_linear_comp = create_linear_search_complexity_chart()
+                    st.plotly_chart(fig_linear_comp, use_container_width=True)
+            
+            if "📋 Tabel Kompleksitas" in show_viz:
+                st.markdown("### 📋 Tabel Perbandingan Nilai Kompleksitas")
+                df_complexity = create_complexity_table()
+                st.dataframe(df_complexity, use_container_width=True)
         
         # ===== BAGIAN 4: KESIMPULAN =====
         st.markdown("---")
@@ -805,8 +731,8 @@ def main():
             
             1. **Sederhana** - mudah diimplementasi
             2. **Universal** - bekerja pada data terurut/tidak terurut
-            3. **Low Memory** - O(1) space complexity
-            4. **Predictable** - performa mudah diprediksi
+            3. **Operasi Dasar** - hanya perbandingan
+            4. **Predictable** - O(1) sampai O(n)
             5. **Stable** - tidak mengubah data asli
             """)
         
@@ -816,9 +742,9 @@ def main():
             
             1. **Slow for large n** - O(n) time complexity
             2. **Inefficient** - harus cek semua elemen di worst case
-            3. **Not optimal** - ada algoritma lebih cepat
-            4. **Bad scalability** - tidak cocok untuk big data
-            5. **No early optimization** - tidak manfaatkan struktur data
+            3. **Operasi Berulang** - n kali perbandingan
+            4. **Not scalable** - tidak cocok untuk big data
+            5. **Linear Growth** - waktu tumbuh proporsional dengan n
             """)
         
         # Rekomendasi penggunaan
@@ -826,13 +752,13 @@ def main():
         
         rec_data = {
             'Use Case': ['Data Kecil (<1000)', 'Data Sedang (1000-10000)', 'Data Besar (>10000)', 
-                         'Data Terurut', 'Pencarian Berulang', 'Real-time Systems'],
+                         'Data Terurut', 'Pencarian Berulang'],
             'Algoritma': ['Linear Search', 'Binary Search / Hash Table', 'Hash Table / Indexing',
-                         'Binary Search', 'Hash Table', 'Hash Table / Bloom Filter'],
+                         'Binary Search', 'Hash Table'],
+            'Operasi Dasar': ['Perbandingan', 'Perbandingan / Hash', 'Hash',
+                            'Perbandingan', 'Hash'],
             'Kompleksitas': ['O(n)', 'O(log n) / O(1)', 'O(1)',
-                            'O(log n)', 'O(1)', 'O(1)'],
-            'Keterangan': ['Cukup efisien', 'Butuh preprocessing', 'Butuh struktur data kompleks',
-                          'Paling efisien', 'Optimal untuk cache', 'Deterministic latency']
+                            'O(log n)', 'O(1)']
         }
         
         df_recommendation = pd.DataFrame(rec_data)
@@ -841,9 +767,14 @@ def main():
         # Final message
         st.info("""
         **🎓 Takeaway:**
-        Linear Search adalah **algoritma fundamental** yang harus dipahami setiap programmer.
-        Meski tidak selalu paling efisien, pemahaman tentang Linear Search memberikan dasar untuk
-        memahami algoritma pencarian yang lebih kompleks. **Kenali use case-nya, gunakan dengan bijak!**
+        Linear Search adalah **algoritma fundamental** dengan operasi dasar **perbandingan**.
+        
+        **📊 Performance Testing** menunjukkan:
+        - Waktu eksekusi tumbuh linear dengan ukuran data
+        - Iteratif lebih stabil untuk data besar
+        - Rekursif berisiko stack overflow
+        
+        **Pahami operasi dasarnya, pilih algoritma sesuai kebutuhan!**
         """)
 
 if __name__ == "__main__":
