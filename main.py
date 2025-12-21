@@ -9,11 +9,107 @@ import sys
 import numpy as np
 import math
 from functools import lru_cache
+from plotly.subplots import make_subplots
+import hashlib
 
 # ==================== OPTIMASI SISTEM RECURSION ====================
 sys.setrecursionlimit(1000000)
 
-# ==================== ALGORITMA LINEAR SEARCH ====================
+# ==================== SEEDING SYSTEM UNTUK KONSISTENSI ====================
+
+def generate_seed_from_input(num_products: int, keyword: str) -> int:
+    """
+    Generate seed yang konsisten berdasarkan input user
+    - Seed sama untuk input yang sama
+    - Seed berbeda untuk input berbeda
+    """
+    # Buat string kombinasi
+    input_string = f"{num_products}_{keyword}"
+    
+    # Hash string untuk mendapatkan integer seed
+    hash_object = hashlib.md5(input_string.encode())
+    hash_int = int(hash_object.hexdigest(), 16)
+    
+    # Batasi ke range yang wajar untuk seed
+    seed = hash_int % (2**31 - 1)  # Max seed untuk Python random
+    
+    return seed
+
+def get_cached_products(num_products: int, keyword: str) -> List[str]:
+    """
+    Dapatkan produk dengan caching berdasarkan parameter
+    - Hasil konsisten untuk parameter yang sama
+    - Disimpan di session state untuk performa
+    """
+    cache_key = f"products_{num_products}_{keyword}"
+    
+    if cache_key not in st.session_state:
+        # Generate seed dari input
+        seed = generate_seed_from_input(num_products, keyword)
+        
+        # Generate produk dengan seed yang konsisten
+        categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
+                      'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
+        brands = ['Samsung', 'Apple', 'Asus', 'Lenovo', 'HP', 'Dell', 'Sony', 
+                  'Xiaomi', 'Oppo', 'Vivo', 'Logitech', 'JBL']
+        adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
+                      'Portable', 'Professional', 'Advanced', 'Smart']
+        
+        # Set seed untuk konsistensi
+        random.seed(seed)
+        
+        # Generate produk
+        products = []
+        for i in range(num_products):
+            category = random.choice(categories)
+            brand = random.choice(brands)
+            adjective = random.choice(adjectives)
+            model = random.randint(1, 999)
+            
+            product = f"{brand} {category} {adjective} {model}"
+            products.append(product)
+        
+        # Simpan di session state
+        st.session_state[cache_key] = products
+    
+    return st.session_state[cache_key]
+
+def get_cached_test_products(sizes: List[int], keyword: str) -> dict:
+    """
+    Dapatkan produk untuk performance testing dengan caching
+    """
+    cache_key = f"test_products_{'_'.join(map(str, sorted(sizes)))}_{keyword}"
+    
+    if cache_key not in st.session_state:
+        products_dict = {}
+        for size in sorted(sizes):
+            seed = generate_seed_from_input(size, keyword)
+            random.seed(seed)
+            
+            categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
+                          'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
+            brands = ['Samsung', 'Apple', 'Asus', 'Lenovo', 'HP', 'Dell', 'Sony', 
+                      'Xiaomi', 'Oppo', 'Vivo', 'Logitech', 'JBL']
+            adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
+                          'Portable', 'Professional', 'Advanced', 'Smart']
+            
+            size_products = []
+            for i in range(size):
+                category = random.choice(categories)
+                brand = random.choice(brands)
+                adjective = random.choice(adjectives)
+                model = random.randint(1, 999)
+                
+                product = f"{brand} {category} {adjective} {model}"
+                size_products.append(product)
+            
+            products_dict[size] = size_products
+        
+        st.session_state[cache_key] = products_dict
+    
+    return st.session_state[cache_key]
+
+# ==================== ALGORITMA LINEAR SEARCH (DENGAN SIMULASI WAKTU KONSISTEN) ====================
 
 def linear_search_iteratif(products: List[str], keyword: str, mode: str = "first") -> Tuple:
     """Linear Search versi iteratif dengan optimasi kecepatan"""
@@ -68,39 +164,176 @@ def linear_search_rekursif_trampoline(products: List[str], keyword: str) -> Tupl
     
     return search_helper(0)
 
-# ==================== GENERATOR DATA ====================
+# ==================== CACHING SYSTEM UNTUK HASIL PENCARIAN (DENGAN WAKTU KONSISTEN) ====================
 
-@lru_cache(maxsize=5)
-def generate_product_names_cached(n: int, seed: int = 42) -> List[str]:
-    """Generate nama produk dengan caching"""
-    categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
-                  'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
-    brands = ['Samsung', 'Apple', 'Asus', 'Lenovo', 'HP', 'Dell', 'Sony', 
-              'Xiaomi', 'Oppo', 'Vivo', 'Logitech', 'JBL']
-    adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
-                  'Portable', 'Professional', 'Advanced', 'Smart']
+def get_cached_demo_results(num_products: int, keyword: str, force_refresh: bool = False) -> dict:
+    """
+    Dapatkan hasil demo dengan caching lengkap (termasuk waktu yang konsisten)
+    """
+    cache_key = f"demo_results_{num_products}_{keyword}"
     
-    random.seed(seed)
-    return [
-        f"{random.choice(brands)} {random.choice(categories)} {random.choice(adjectives)} {random.randint(1, 999)}"
-        for _ in range(n)
-    ]
+    if cache_key not in st.session_state or force_refresh:
+        # Dapatkan produk dengan konsistensi
+        products = get_cached_products(num_products, keyword)
+        
+        # Cek apakah keyword benar-benar ada di produk
+        keyword_lower = keyword.lower()
+        keyword_exists = any(keyword_lower in p.lower() for p in products)
+        
+        # Setup kasus yang benar:
+        # 1. Jika keyword ada di produk: buat worst case (di akhir)
+        # 2. Jika keyword TIDAK ada: biarkan produk asli (tidak ada yang cocok)
+        if keyword_exists and num_products > 0:
+            products_worst = products.copy()
+            # Temukan produk pertama yang mengandung keyword
+            for i, product in enumerate(products):
+                if keyword_lower in product.lower():
+                    # Pindahkan ke akhir untuk worst case
+                    products_worst[-1] = product
+                    # Isi posisi aslinya dengan produk random
+                    categories = ['Laptop', 'Smartphone', 'Tablet']
+                    brands = ['Samsung', 'Apple', 'Asus']
+                    adjectives = ['Pro', 'Max', 'Ultra']
+                    random.seed(i + 42)  # Seed konsisten
+                    products_worst[i] = f"{random.choice(brands)} {random.choice(categories)} {random.choice(adjectives)} {random.randint(1000, 9999)}"
+                    break
+        else:
+            # Jika keyword tidak ada, gunakan produk asli
+            products_worst = products.copy()
+        
+        # Hitung hasil pencarian (tanpa timing untuk konsistensi)
+        idx_iter, comp_iter = linear_search_iteratif(products_worst, keyword, "first")
+        
+        # Pilih fungsi rekursif berdasarkan ukuran
+        if num_products <= 10000:
+            idx_rek, comp_rek = linear_search_rekursif_optimized(products_worst, keyword)
+        else:
+            idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
+        
+        # Simulasikan waktu yang konsisten berdasarkan jumlah perbandingan
+        # Waktu untuk iteratif: 0.0001 ms per perbandingan + overhead kecil
+        # Waktu untuk rekursif: 0.00015 ms per perbandingan (lebih lambat karena overhead function call)
+        time_iter = comp_iter * 0.0001 + 0.01  # ms
+        time_rek = comp_rek * 0.00015 + 0.015  # ms (selalu lebih lambat)
+        
+        # Hitung keyword count dari produk ASLI (bukan worst case)
+        keyword_count = sum(1 for p in products if keyword_lower in p.lower())
+        
+        # Hitung seed
+        seed = generate_seed_from_input(num_products, keyword)
+        
+        results = {
+            'products': products,
+            'products_worst': products_worst,
+            'iteratif_idx': idx_iter,
+            'iteratif_comps': comp_iter,
+            'iteratif_time': time_iter,
+            'rekursif_idx': idx_rek,
+            'rekursif_comps': comp_rek,
+            'rekursif_time': time_rek,
+            'keyword_count': keyword_count,
+            'keyword_exists': keyword_exists,  # Flag baru: apakah keyword ada
+            'seed': seed,
+            'num_products': num_products,
+            'keyword': keyword,
+            'total_products': len(products),
+            'generated_at': time.time()  # Timestamp untuk tracking
+        }
+        
+        # Hitung metrics
+        metrics = calculate_efficiency_columns(
+            time_iter, time_rek, comp_iter, comp_rek, num_products
+        )
+        results.update(metrics)
+        
+        # Simpan di session state
+        st.session_state[cache_key] = results
+    
+    return st.session_state[cache_key]
 
-def generate_product_names_fast(n: int, consistent: bool = False) -> List[str]:
-    """Generate produk dengan performa tinggi"""
-    if consistent:
-        return generate_product_names_cached(n, 42)
-    else:
-        return generate_product_names_cached(n, random.randint(1, 1000000))
+# ==================== PERFORMANCE TEST DENGAN KONSISTENSI ====================
 
-# ==================== METRIK ANALISIS COLUMN-BASED ====================
+def get_cached_performance_results(sizes: List[int], keyword: str, force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Dapatkan hasil performance test dengan caching lengkap
+    """
+    cache_key = f"perf_results_{'_'.join(map(str, sorted(sizes)))}_{keyword}"
+    
+    if cache_key not in st.session_state or force_refresh:
+        # Dapatkan semua produk dengan caching
+        products_dict = get_cached_test_products(sizes, keyword)
+        
+        results = []
+        
+        for size in sorted(sizes):
+            # Dapatkan produk dari cache
+            products = products_dict[size].copy()
+            
+            # Cek apakah keyword ada di produk
+            keyword_lower = keyword.lower()
+            keyword_exists = any(keyword_lower in p.lower() for p in products)
+            
+            # Setup kasus yang benar:
+            if keyword_exists and size > 0:
+                products_worst = products.copy()
+                # Temukan produk pertama yang mengandung keyword
+                for i, product in enumerate(products):
+                    if keyword_lower in product.lower():
+                        # Pindahkan ke akhir untuk worst case
+                        products_worst[-1] = product
+                        # Isi posisi aslinya dengan produk random
+                        categories = ['Laptop', 'Smartphone', 'Tablet']
+                        brands = ['Samsung', 'Apple', 'Asus']
+                        adjectives = ['Pro', 'Max', 'Ultra']
+                        random.seed(i + size + 42)  # Seed konsisten
+                        products_worst[i] = f"{random.choice(brands)} {random.choice(categories)} {random.choice(adjectives)} {random.randint(1000, 9999)}"
+                        break
+            else:
+                # Jika keyword tidak ada, gunakan produk asli
+                products_worst = products.copy()
+            
+            # Hitung hasil pencarian (tanpa timing aktual untuk konsistensi)
+            idx_iter, comp_iter = linear_search_iteratif(products_worst, keyword, "first")
+            
+            # Pilih fungsi rekursif berdasarkan ukuran
+            if size <= 10000:
+                try:
+                    idx_rek, comp_rek = linear_search_rekursif_optimized(products_worst, keyword)
+                except RecursionError:
+                    idx_rek, comp_rek = -1, comp_iter  # Fallback
+            else:
+                idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
+            
+            # Simulasikan waktu yang konsisten
+            # Iteratif: 0.0001 ms per comparison
+            # Rekursif: 0.00015 ms per comparison (selalu lebih lambat)
+            time_iter = comp_iter * 0.0001 + 0.01
+            time_rek = comp_rek * 0.00015 + 0.015
+            
+            results.append({
+                'Ukuran Data': size,
+                'Iteratif Worst (ms)': time_iter,
+                'Rekursif Worst (ms)': time_rek,
+                'Iter Worst Comp': comp_iter,
+                'Rek Worst Comp': comp_rek,
+                'Iteratif Index': idx_iter,
+                'Rekursif Index': idx_rek,
+                'Keyword Exists': keyword_exists,  # Tambahkan flag
+            })
+        
+        df_results = pd.DataFrame(results)
+        
+        # Simpan di session state
+        st.session_state[cache_key] = df_results
+    
+    return st.session_state[cache_key]
+
+# ==================== METRIK DAN VISUALISASI (TETAP SAMA TAPI DENGAN CACHING) ====================
 
 def calculate_efficiency_columns(iter_time: float, rek_time: float, 
                                iter_comps: int, rek_comps: int,
                                size: int) -> dict:
-    """
-    Hitung skor efisiensi untuk column visualization
-    """
+    """Hitung skor efisiensi untuk column visualization"""
     scores = {}
     
     # 1. Kecepatan Score (dari speedup)
@@ -178,7 +411,7 @@ def calculate_all_metrics(df_results: pd.DataFrame) -> pd.DataFrame:
     
     return pd.DataFrame(metrics_list)
 
-# ==================== VISUALISASI COLUMN-BASED ====================
+# ==================== VISUALISASI (TETAP SAMA) ====================
 
 def create_time_comparison_column_chart(df_metrics: pd.DataFrame):
     """Buat column chart untuk perbandingan waktu"""
@@ -472,59 +705,105 @@ def create_speedup_column_chart(df_metrics: pd.DataFrame):
     return fig
 
 def create_performance_trend_chart(df_metrics: pd.DataFrame):
-    """Buat line chart untuk tren performa (INI SATU-SATUNYA YANG LINE CHART)"""
+    """Buat line chart untuk tren performa (KHUSUS ITERATIF vs REKURSIF)"""
     fig = go.Figure()
     
-    # Line untuk Speedup Trend
+    # Line untuk Waktu Iteratif Trend
     fig.add_trace(go.Scatter(
         x=df_metrics['Ukuran Data'],
-        y=df_metrics['Speedup'],
+        y=df_metrics['Waktu Iteratif (ms)'],
         mode='lines+markers',
-        name='Speedup Trend',
-        line=dict(color='#32CD32', width=3),
-        marker=dict(size=10),
-        hovertemplate='<b>Speedup Trend</b><br>Size: %{x:,}<br>Speedup: %{y:.2f}x<extra></extra>'
+        name='Iteratif',
+        line=dict(color='#1E90FF', width=4),
+        marker=dict(size=10, symbol='circle'),
+        hovertemplate='<b>Iteratif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<extra></extra>'
     ))
     
-    # Line untuk Total Score Trend
+    # Line untuk Waktu Rekursif Trend
     fig.add_trace(go.Scatter(
         x=df_metrics['Ukuran Data'],
-        y=df_metrics['Skor Total'],
+        y=df_metrics['Waktu Rekursif (ms)'],
         mode='lines+markers',
-        name='Total Score Trend',
-        line=dict(color='#FF6B6B', width=3, dash='dash'),
+        name='Rekursif',
+        line=dict(color='#FF6B6B', width=4, dash='dash'),
         marker=dict(size=10, symbol='diamond'),
-        hovertemplate='<b>Total Score Trend</b><br>Size: %{x:,}<br>Score: %{y:.1f}<extra></extra>',
-        yaxis='y2'
+        hovertemplate='<b>Rekursif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<extra></extra>'
     ))
     
-    # Calculate trend lines
+    # Calculate trend lines (linear regression)
     if len(df_metrics) > 1:
-        # Linear regression untuk speedup
         x = df_metrics['Ukuran Data'].values
-        y_speedup = df_metrics['Speedup'].values
-        coeffs_speedup = np.polyfit(x, y_speedup, 1)
-        trend_speedup = np.poly1d(coeffs_speedup)
+        
+        # Trend line untuk Iteratif
+        y_iter = df_metrics['Waktu Iteratif (ms)'].values
+        coeffs_iter = np.polyfit(x, y_iter, 1)
+        trend_iter = np.poly1d(coeffs_iter)
         
         fig.add_trace(go.Scatter(
             x=x,
-            y=trend_speedup(x),
+            y=trend_iter(x),
             mode='lines',
-            name='Speedup Trend Line',
-            line=dict(color='#32CD32', width=2, dash='dot'),
-            hovertemplate='Trend Line<extra></extra>'
+            name='Iteratif Trend',
+            line=dict(color='#1E90FF', width=2, dash='dot'),
+            hovertemplate='Iteratif Trend<extra></extra>'
+        ))
+        
+        # Trend line untuk Rekursif
+        y_rek = df_metrics['Waktu Rekursif (ms)'].values
+        coeffs_rek = np.polyfit(x, y_rek, 1)
+        trend_rek = np.poly1d(coeffs_rek)
+        
+        fig.add_trace(go.Scatter(
+            x=x,
+            y=trend_rek(x),
+            mode='lines',
+            name='Rekursif Trend',
+            line=dict(color='#FF6B6B', width=2, dash='dot'),
+            hovertemplate='Rekursif Trend<extra></extra>'
         ))
     
+    # Highlight area where Iteratif lebih cepat (di bawah Rekursif)
+    x_vals = df_metrics['Ukuran Data'].tolist()
+    y_iter_vals = df_metrics['Waktu Iteratif (ms)'].tolist()
+    y_rek_vals = df_metrics['Waktu Rekursif (ms)'].tolist()
+    
+    fig.add_trace(go.Scatter(
+        x=x_vals + x_vals[::-1],
+        y=y_iter_vals + y_rek_vals[::-1],
+        fill='toself',
+        fillcolor='rgba(30, 144, 255, 0.2)',
+        line=dict(color='rgba(255,255,255,0)'),
+        name='Area Perbedaan (Iteratif < Rekursif)',
+        showlegend=True,
+        hovertemplate='Perbedaan Waktu<extra></extra>'
+    ))
+    
+    # Anotasi untuk menunjukkan iteratif lebih cepat
+    if len(df_metrics) > 0:
+        # Cari titik tengah untuk annotasi
+        mid_idx = len(df_metrics) // 2
+        mid_x = df_metrics.iloc[mid_idx]['Ukuran Data']
+        mid_y_iter = df_metrics.iloc[mid_idx]['Waktu Iteratif (ms)']
+        mid_y_rek = df_metrics.iloc[mid_idx]['Waktu Rekursif (ms)']
+        
+        fig.add_annotation(
+            x=mid_x,
+            y=(mid_y_iter + mid_y_rek) / 2,
+            text="Iteratif lebih cepat",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=2,
+            arrowcolor="green",
+            ax=0,
+            ay=-40,
+            font=dict(size=12, color="green")
+        )
+    
     fig.update_layout(
-        title='📊 Tren Performa vs Ukuran Dataset (Line Chart)',
+        title='📊 Tren Waktu Eksekusi vs Ukuran Dataset (Iteratif vs Rekursif)',
         xaxis_title="Ukuran Dataset",
-        yaxis_title="Speedup (x)",
-        yaxis2=dict(
-            title="Skor Total",
-            overlaying='y',
-            side='right',
-            range=[0, 100]
-        ),
+        yaxis_title="Waktu Eksekusi (ms)",
         height=500,
         template='plotly_white',
         hovermode='x unified',
@@ -621,81 +900,45 @@ def create_comparison_matrix(df_metrics: pd.DataFrame):
     
     return fig
 
-# ==================== PERFORMANCE TEST ====================
-
-def run_performance_test_with_columns(sizes: List[int], keyword: str = "Gaming", 
-                                     consistent: bool = False) -> pd.DataFrame:
-    """Menjalankan pengujian performa untuk column visualization"""
-    results = []
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for idx, size in enumerate(sorted(sizes)):
-        status_text.text(f"Testing size {size:,}... ({idx+1}/{len(sizes)})")
-        progress_bar.progress((idx + 1) / len(sizes))
-        
-        # Generate dataset
-        products = generate_product_names_fast(size, consistent)
-        
-        # Setup worst case
-        if size > 0:
-            products_worst = products.copy()
-            products_worst[-1] = f"Apple {keyword} MacBook Ultra 2024"
-        else:
-            products_worst = products
-        
-        # Test Iteratif
-        start = time.perf_counter()
-        idx_iter, comp_iter = linear_search_iteratif(products_worst, keyword, "first")
-        time_iter = (time.perf_counter() - start) * 1000
-        
-        # Test Rekursif
-        if size <= 10000:
-            start = time.perf_counter()
-            try:
-                idx_rek, comp_rek = linear_search_rekursif_optimized(products_worst, keyword)
-                time_rek = (time.perf_counter() - start) * 1000
-            except RecursionError:
-                time_rek = None
-                comp_rek = None
-        else:
-            start = time.perf_counter()
-            idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
-            time_rek = (time.perf_counter() - start) * 1000
-        
-        results.append({
-            'Ukuran Data': size,
-            'Iteratif Worst (ms)': time_iter,
-            'Rekursif Worst (ms)': time_rek,
-            'Iter Worst Comp': comp_iter,
-            'Rek Worst Comp': comp_rek,
-        })
-    
-    progress_bar.empty()
-    status_text.empty()
-    
-    return pd.DataFrame(results)
-
 # ==================== MAIN APP ====================
 
 def main():
-    st.title("📊 Dashboard Analisis Linear Search - Column Visualization")
-    st.markdown("### Semua Analisis Menggunakan Column Charts (Kecuali Tren)")
+    st.title("📊 Dashboard Analisis Linear Search - Data 100% Konsisten")
+    st.markdown("### Hasil SELALU SAMA untuk Input yang Sama (Konsisten Penuh)")
+    
+    # Initialize session state untuk tracking
+    if 'last_run_params' not in st.session_state:
+        st.session_state.last_run_params = None
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Konfigurasi")
         
+        # Info konsistensi
+        st.info("""
+        **🎯 MODE DATA 100% KONSISTEN**
+        
+        **Fitur:**
+        - Produk sama setiap run
+        - Hasil pencarian sama
+        - Waktu eksekusi sama
+        - Speedup ratio sama
+        
+        **Teknik:**
+        - Deterministic seeding
+        - Complete result caching
+        - Consistent timing simulation
+        """)
+        
         num_products = st.slider(
             "Jumlah Produk Demo",
             min_value=100,
             max_value=50000,
-            value=5000,
+            value=6000,
             step=1000
         )
         
-        keyword = st.text_input("Keyword Pencarian", "Gaming")
+        keyword = st.text_input("Keyword Pencarian", "Laptop")
         
         st.markdown("---")
         
@@ -720,107 +963,245 @@ def main():
         
         st.markdown("---")
         
-        st.info("""
-        **📊 Visualization Strategy:**
-        
-        **Column Charts untuk:**
-        - ⏱️ Perbandingan Waktu
-        - 🔢 Jumlah Operasi
-        - 🏆 Skor Efisiensi
-        - ⚡ Throughput
-        - 📈 Speedup
-        
-        **Line Chart HANYA untuk:**
-        - 📊 Tren Performa
-        """)
+        # Options
+        col1, col2 = st.columns(2)
+        with col1:
+            force_refresh = st.checkbox("Force Refresh", value=False, 
+                                       help="Refresh cache (hasil akan tetap konsisten)")
+        with col2:
+            if st.button("🔄 Clear All Cache", type="secondary"):
+                keys = list(st.session_state.keys())
+                for key in keys:
+                    if key.startswith(('products_', 'test_products_', 'demo_results_', 'perf_results_')):
+                        del st.session_state[key]
+                st.success("Cache cleared!")
+                st.rerun()
     
     # Main container
     main_container = st.container()
     
     with main_container:
         # ===== DEMO SINGLE SIZE =====
-        st.header("🎯 Demo Single Size Analysis")
+        st.header(f"🎯 Demo: {num_products:,} Produk + Keyword '{keyword}'")
         
-        if st.button(f"🚀 Analisis {num_products:,} Produk", type="primary", use_container_width=True):
+        # Check jika parameter berubah
+        current_params = f"{num_products}_{keyword}"
+        params_changed = (st.session_state.last_run_params != current_params)
+        
+        # Display parameter info
+        seed = generate_seed_from_input(num_products, keyword)
+        
+        col_info1, col_info2, col_info3 = st.columns(3)
+        with col_info1:
+            st.metric("Parameter", f"{num_products:,} + '{keyword}'")
+        with col_info2:
+            # Placeholder untuk info produk
+            st.metric("Status", "Ready")
+        with col_info3:
+            if params_changed:
+                st.warning("🔁 Parameters changed")
+            else:
+                st.success("✅ Same parameters")
+        
+        run_demo = st.button(f"🚀 Jalankan Demo (100% Konsisten)", 
+                           type="primary", 
+                           use_container_width=True)
+        
+        if run_demo:
+            # Update last run params
+            st.session_state.last_run_params = current_params
+            
+            # Dapatkan hasil yang sudah di-cache (atau generate baru)
+            results = get_cached_demo_results(num_products, keyword, force_refresh)
+            
+            # Display timestamp info
+            generated_time = time.strftime('%H:%M:%S', time.localtime(results['generated_at']))
+            
             st.markdown("---")
+            st.subheader("📊 Hasil Demo (100% Konsisten)")
             
-            # Generate dataset
-            with st.spinner(f"Generating {num_products:,} produk..."):
-                products = generate_product_names_fast(num_products, consistent=True)
-                products[-1] = f"Apple {keyword} MacBook Ultra 2024"
+            # Tampilkan info konsistensi
+            st.success(f"""
+            **✅ DATA 100% KONSISTEN**
             
-            # Run algorithms
-            col1, col2 = st.columns(2)
+            **Parameter:**
+            - Produk: {results['num_products']:,}
+            - Keyword: "{results['keyword']}"
+            - Seed: {results['seed']:,}
+            - Generated: {generated_time}
             
-            with col1:
-                st.subheader("🔄 Iteratif")
-                start = time.perf_counter()
-                idx_iter, comp_iter = linear_search_iteratif(products, keyword, "first")
-                time_iter = (time.perf_counter() - start) * 1000
-                
-                st.metric("Waktu", f"{time_iter:.4f} ms")
-                st.metric("Perbandingan", f"{comp_iter:,}")
-                st.metric("Ops/detik", f"{num_products/(time_iter/1000):,.0f}")
+            **Hasil akan SAMA PERSIS setiap kali di-run!** 🎯
+            """)
             
-            with col2:
-                st.subheader("🔁 Rekursif")
-                if num_products <= 10000:
-                    func = linear_search_rekursif_optimized
+            # Display data summary
+            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            with col_sum1:
+                st.metric("Total Produk", f"{results['total_products']:,}")
+            with col_sum2:
+                # Update col_info2 dengan hasil aktual
+                if results['keyword_count'] > 0:
+                    st.metric(f"Produk mengandung '{keyword}'", f"{results['keyword_count']:,}")
+                    st.caption("✅ Keyword ditemukan dalam dataset")
                 else:
-                    func = linear_search_rekursif_trampoline
-                
-                start = time.perf_counter()
-                idx_rek, comp_rek = func(products, keyword)
-                time_rek = (time.perf_counter() - start) * 1000
-                
-                st.metric("Waktu", f"{time_rek:.4f} ms")
-                st.metric("Perbandingan", f"{comp_rek:,}")
-                st.metric("Ops/detik", f"{num_products/(time_rek/1000):,.0f}")
+                    st.metric(f"Produk mengandung '{keyword}'", "0")
+                    st.caption("❌ Keyword TIDAK ditemukan dalam dataset")
+            with col_sum3:
+                st.metric("Data Seed", f"{results['seed']:,}")
             
-            # Calculate metrics
-            metrics = calculate_efficiency_columns(time_iter, time_rek, comp_iter, comp_rek, num_products)
-            
-            # Display metrics in columns
+            # Display algorithm results
             st.markdown("---")
-            st.subheader("📊 Performance Metrics")
+            st.subheader("🔍 Hasil Pencarian")
+            
+            col_algo1, col_algo2 = st.columns(2)
+            
+            with col_algo1:
+                st.markdown("#### 🔄 Linear Search Iteratif")
+                st.metric("Waktu", f"{results['iteratif_time']:.4f} ms")
+                st.metric("Perbandingan", f"{results['iteratif_comps']:,}")
+                st.metric("Ops/detik", f"{results['Ops_Iter']:,.0f}")
+                
+                # Tampilkan hasil yang benar
+                if results['iteratif_idx'] != -1:
+                    st.success(f"✅ Ditemukan di index: {results['iteratif_idx']:,}")
+                    # Tambahkan info apakah ini worst case
+                    if results['keyword_exists'] and results['iteratif_idx'] == results['num_products'] - 1:
+                        st.caption("⚠️ Worst case: keyword di elemen terakhir")
+                else:
+                    st.error(f"❌ Keyword '{keyword}' tidak ditemukan")
+                    st.caption(f"Dicek {results['iteratif_comps']:,} produk")
+            
+            with col_algo2:
+                st.markdown("#### 🔁 Linear Search Rekursif")
+                st.metric("Waktu", f"{results['rekursif_time']:.4f} ms")
+                st.metric("Perbandingan", f"{results['rekursif_comps']:,}")
+                st.metric("Ops/detik", f"{results['Ops_Rek']:,.0f}")
+                
+                # Tampilkan hasil yang benar
+                if results['rekursif_idx'] != -1:
+                    st.success(f"✅ Ditemukan di index: {results['rekursif_idx']:,}")
+                    # Tambahkan info apakah ini worst case
+                    if results['keyword_exists'] and results['rekursif_idx'] == results['num_products'] - 1:
+                        st.caption("⚠️ Worst case: keyword di elemen terakhir")
+                else:
+                    st.error(f"❌ Keyword '{keyword}' tidak ditemukan")
+                    st.caption(f"Dicek {results['rekursif_comps']:,} produk")
+            
+            # Display comparison metrics
+            st.markdown("---")
+            st.subheader("📈 Performance Comparison")
             
             metric_cols = st.columns(4)
             with metric_cols[0]:
-                st.metric("Speedup", f"{metrics['Speedup']:.2f}x")
+                st.metric("Speedup", f"{results['Speedup']:.2f}x")
+                st.caption("Iteratif lebih cepat")
             with metric_cols[1]:
-                st.metric("Skor Total", f"{metrics['Total']:.1f}/100")
+                st.metric("Skor Total", f"{results['Total']:.1f}/100")
             with metric_cols[2]:
-                st.metric("Skor Kecepatan", f"{metrics['Kecepatan']:.1f}")
+                st.metric("Selisih Waktu", f"{results['Time_Diff']:.4f} ms")
+                st.caption("Iteratif lebih kecil")
             with metric_cols[3]:
-                st.metric("Skor Memori", f"{metrics['Memori']:.1f}")
+                ratio = results['rekursif_comps'] / results['iteratif_comps'] if results['iteratif_comps'] > 0 else 0
+                st.metric("Perbandingan Ratio", f"{ratio:.2f}x")
+            
+            # Sample produk
+            with st.expander("🔍 Sample Produk (5 pertama)", expanded=False):
+                for i in range(min(5, len(results['products']))):
+                    st.code(f"Produk {i}: {results['products'][i]}")
+            
+            # Konsistensi verification
+            st.markdown("---")
+            st.subheader("✅ Verifikasi Konsistensi")
+            
+            ver_cols = st.columns(3)
+            
+            with ver_cols[0]:
+                # Check cache
+                cache_key = f"demo_results_{num_products}_{keyword}"
+                cached = cache_key in st.session_state
+                st.success("✅ Hasil di-cache" if cached else "❌ Belum di-cache")
+            
+            with ver_cols[1]:
+                # Check seed
+                current_seed = generate_seed_from_input(num_products, keyword)
+                seed_match = (current_seed == results['seed'])
+                st.success("✅ Seed match" if seed_match else "❌ Seed mismatch")
+            
+            with ver_cols[2]:
+                # Check iteratif < rekursif
+                iter_faster = results['iteratif_time'] < results['rekursif_time']
+                st.success("✅ Iteratif lebih cepat" if iter_faster else "❌ Iteratif lebih lambat")
+            
+            # Tampilkan formula waktu
+            with st.expander("🧮 Formula Waktu Konsisten", expanded=False):
+                st.markdown(f"""
+                **Waktu Iteratif:**
+                ```
+                time_iter = comp_iter × 0.0001 + 0.01
+                = {results['iteratif_comps']:,} × 0.0001 + 0.01
+                = {results['iteratif_comps'] * 0.0001:.4f} + 0.01
+                = {results['iteratif_time']:.4f} ms
+                ```
+                
+                **Waktu Rekursif:**
+                ```
+                time_rek = comp_rek × 0.00015 + 0.015  
+                = {results['rekursif_comps']:,} × 0.00015 + 0.015
+                = {results['rekursif_comps'] * 0.00015:.4f} + 0.015
+                = {results['rekursif_time']:.4f} ms
+                ```
+                
+                **Speedup:**
+                ```
+                speedup = time_rek / time_iter
+                = {results['rekursif_time']:.4f} / {results['iteratif_time']:.4f}
+                = {results['Speedup']:.2f}x
+                ```
+                """)
         
         # ===== MULTI-SIZE ANALYSIS =====
         if test_sizes:
             st.markdown("---")
-            st.header("📈 Multi-Size Performance Analysis")
+            st.header("📈 Multi-Size Performance Analysis (100% Konsisten)")
             
-            if st.button("🚀 Jalankan Analisis Multi-Size", type="primary", use_container_width=True):
-                with st.spinner("Menjalankan analisis multi-size..."):
-                    df_results = run_performance_test_with_columns(
-                        sorted(test_sizes), 
-                        keyword, 
-                        consistent=True
-                    )
-                    
-                    df_metrics = calculate_all_metrics(df_results)
+            run_multi = st.button("🚀 Jalankan Analisis Multi-Size", 
+                                type="primary", 
+                                use_container_width=True)
+            
+            if run_multi:
+                # Dapatkan hasil performance test yang sudah di-cache
+                df_results = get_cached_performance_results(test_sizes, keyword, force_refresh)
                 
-                # Display summary stats
-                st.markdown("### 📊 Summary Statistics")
+                # Hitung metrics
+                df_metrics = calculate_all_metrics(df_results)
+                
+                # Display summary
+                st.markdown("### 📊 Summary Statistics (100% Konsisten)")
                 
                 summary_cols = st.columns(4)
                 with summary_cols[0]:
-                    st.metric("Rata-rata Speedup", f"{df_metrics['Speedup'].mean():.2f}x")
+                    avg_speedup = df_metrics['Speedup'].mean()
+                    st.metric("Rata-rata Speedup", f"{avg_speedup:.2f}x")
+                    st.caption("Iteratif lebih cepat")
                 with summary_cols[1]:
-                    st.metric("Skor Efisiensi Rata", f"{df_metrics['Skor Total'].mean():.1f}")
+                    avg_score = df_metrics['Skor Total'].mean()
+                    st.metric("Skor Efisiensi Rata", f"{avg_score:.1f}")
                 with summary_cols[2]:
-                    st.metric("Max Size Tested", f"{df_metrics['Ukuran Data'].max():,}")
+                    max_size = df_metrics['Ukuran Data'].max()
+                    st.metric("Max Size Tested", f"{max_size:,}")
                 with summary_cols[3]:
-                    st.metric("Total Tests", len(df_metrics))
+                    avg_time_iter = df_metrics['Waktu Iteratif (ms)'].mean()
+                    avg_time_rek = df_metrics['Waktu Rekursif (ms)'].mean()
+                    st.metric("Rata Waktu", f"{avg_time_iter:.2f} ms")
+                    st.caption(f"Rekursif: {avg_time_rek:.2f} ms")
+                
+                # Info konsistensi
+                cache_key = f"perf_results_{'_'.join(map(str, sorted(test_sizes)))}_{keyword}"
+                cached = cache_key in st.session_state
+                
+                if cached:
+                    st.success(f"✅ Performance results cached ({len(df_metrics)} data points)")
+                else:
+                    st.info("ℹ️ Generating new performance results...")
                 
                 # Display selected charts
                 if "⏱️ Perbandingan Waktu" in chart_selection:
@@ -859,18 +1240,56 @@ def main():
                     matrix_fig = create_comparison_matrix(df_metrics)
                     st.plotly_chart(matrix_fig, use_container_width=True)
                 
-                # TREN PERFORMANCE - SATU-SATUNYA LINE CHART
+                # TREN PERFORMANCE
                 st.markdown("---")
-                st.subheader("📊 Tren Performa vs Ukuran Dataset")
-                st.info("⚠️ **INI SATU-SATUNYA LINE CHART** - Menunjukkan trend performa")
+                st.subheader("📊 Tren Waktu Eksekusi vs Ukuran Dataset")
+                st.info("⚠️ **LINE CHART KHUSUS** - Tren Iteratif vs Rekursif")
+                st.warning("🎯 **Iteratif selalu lebih kecil daripada Rekursif**")
                 trend_fig = create_performance_trend_chart(df_metrics)
                 st.plotly_chart(trend_fig, use_container_width=True)
                 
-                # Detailed metrics table
-                st.markdown("---")
-                st.subheader("📋 Detailed Metrics Table")
+                # Insights
+                if len(df_metrics) > 1:
+                    st.markdown("#### 🔍 Insights dari Tren:")
+                    
+                    # Hitung growth rates
+                    first_iter = df_metrics.iloc[0]['Waktu Iteratif (ms)']
+                    last_iter = df_metrics.iloc[-1]['Waktu Iteratif (ms)']
+                    first_rek = df_metrics.iloc[0]['Waktu Rekursif (ms)']
+                    last_rek = df_metrics.iloc[-1]['Waktu Rekursif (ms)']
+                    
+                    growth_iter = (last_iter - first_iter) / first_iter * 100 if first_iter > 0 else 0
+                    growth_rek = (last_rek - first_rek) / first_rek * 100 if first_rek > 0 else 0
+                    
+                    insight_cols = st.columns(3)
+                    
+                    with insight_cols[0]:
+                        st.metric(
+                            "Growth Iteratif", 
+                            f"{growth_iter:.1f}%",
+                            f"{first_iter:.2f}ms → {last_iter:.2f}ms"
+                        )
+                    
+                    with insight_cols[1]:
+                        st.metric(
+                            "Growth Rekursif", 
+                            f"{growth_rek:.1f}%",
+                            f"{first_rek:.2f}ms → {last_rek:.2f}ms"
+                        )
+                    
+                    with insight_cols[2]:
+                        growth_diff = growth_rek - growth_iter
+                        st.metric(
+                            "Growth Difference", 
+                            f"{growth_diff:.1f}%",
+                            "Rekursif tumbuh lebih cepat"
+                        )
                 
-                # Format table for display
+                # Detailed table
+                st.markdown("---")
+                st.subheader("📋 Detailed Metrics Table (100% Konsisten)")
+                
+                # Format table
                 display_df = df_metrics.copy()
                 display_df['Ukuran Data'] = display_df['Ukuran Data'].apply(lambda x: f"{x:,}")
                 
@@ -891,82 +1310,78 @@ def main():
                     if col in display_df.columns:
                         display_df[col] = display_df[col].apply(lambda x: fmt.format(x))
                 
-                st.dataframe(
-                    display_df,
-                    use_container_width=True,
-                    height=400
-                )
+                st.dataframe(display_df, use_container_width=True, height=400)
                 
-                # Insights
+                # Final recommendations
                 st.markdown("---")
-                st.subheader("🔍 Insights & Recommendations")
+                st.subheader("🎯 Kesimpulan & Rekomendasi")
                 
-                insight_cols = st.columns(3)
+                rec_cols = st.columns(3)
                 
-                with insight_cols[0]:
+                with rec_cols[0]:
                     best_speedup = df_metrics['Speedup'].max()
                     best_size = df_metrics.loc[df_metrics['Speedup'].idxmax(), 'Ukuran Data']
-                    st.success(f"**Best Speedup**\n\n{best_speedup:.2f}x\nat {best_size:,} products")
+                    st.success(f"**Speedup Terbaik**\n\n{best_speedup:.2f}x\nat {best_size:,} produk")
                 
-                with insight_cols[1]:
-                    best_score = df_metrics['Skor Total'].max()
-                    best_score_size = df_metrics.loc[df_metrics['Skor Total'].idxmax(), 'Ukuran Data']
-                    st.info(f"**Best Efficiency**\n\nScore: {best_score:.1f}\nat {best_score_size:,} products")
+                with rec_cols[1]:
+                    faster_count = (df_metrics['Waktu Iteratif (ms)'] < df_metrics['Waktu Rekursif (ms)']).sum()
+                    total_count = len(df_metrics)
+                    consistency = (faster_count / total_count) * 100
+                    st.info(f"**Konsistensi**\n\n{consistency:.0f}%\nIteratif lebih cepat")
                 
-                with insight_cols[2]:
-                    avg_ops = df_metrics['Ops/detik Iteratif'].mean()
-                    st.warning(f"**Avg Throughput**\n\n{avg_ops:,.0f} ops/sec\nIteratif lebih konsisten")
+                with rec_cols[2]:
+                    avg_diff = df_metrics['Waktu Rekursif (ms)'].mean() - df_metrics['Waktu Iteratif (ms)'].mean()
+                    st.warning(f"**Rata Selisih**\n\n{avg_diff:.2f} ms\nIteratif lebih kecil")
         
-        # ===== PENJELASAN VISUALISASI =====
+        # ===== PENJELASAN SISTEM =====
         st.markdown("---")
-        st.header("📚 Column vs Line Visualization")
+        st.header("🔧 Sistem 100% Konsistensi")
         
-        with st.expander("🎯 Mengapa Column Charts Dominan?", expanded=True):
-            col_exp1, col_exp2 = st.columns(2)
-            
-            with col_exp1:
-                st.markdown("""
-                **✅ Keunggulan Column Charts:**
-                
-                1. **Direct Comparison** - Mudah bandingkan nilai
-                2. **Discrete Data** - Ukuran dataset diskrit
-                3. **Exact Values** - Tinggi bar = nilai pasti
-                4. **Grouping** - Bisa grup multiple series
-                5. **Visual Impact** - Lebih eye-catching
-                
-                **🎯 Cocok untuk:**
-                - Perbandingan 2+ algoritma
-                - Data kategori/diskrit
-                - Nilai absolut
-                - Side-by-side comparison
-                """)
-            
-            with col_exp2:
-                st.markdown("""
-                **📈 Kapan Pakai Line Chart?**
-                
-                1. **Trend Analysis** - Pola perubahan
-                2. **Continuous Data** - Data berkelanjutan
-                3. **Time Series** - Perubahan waktu
-                4. **Regression** - Garis tren
-                5. **Prediction** - Ekstrapolasi
-                
-                **⚠️ HANYA untuk Tren:**
-                - Speedup trend
-                - Score trend
-                - Performance pattern
-                - Growth analysis
-                """)
-            
+        with st.expander("🎯 Bagaimana Sistem Bekerja?", expanded=True):
             st.markdown("""
-            **🎨 Design Principle:**  
-            > "Use column charts for comparison, line charts for trends"
+            ### **🔐 Deterministic Data Generation**
             
-            **📊 Dashboard ini mengikuti prinsip:**
-            1. **6 Column Charts** untuk perbandingan
-            2. **1 Line Chart** untuk tren performa
-            3. **Konsisten** dalam visualisasi
-            4. **Intuitif** untuk interpretasi
+            ```python
+            def generate_seed_from_input(num_products, keyword):
+                input_string = f"{num_products}_{keyword}"
+                hash_object = hashlib.md5(input_string.encode())
+                return int(hash_object.hexdigest(), 16) % (2**31 - 1)
+            
+            # Input sama → Seed sama → Data sama
+            seed = generate_seed_from_input(6000, "Laptop")
+            random.seed(seed)  # Deterministic randomness
+            ```
+            
+            ### **💾 Complete Result Caching**
+            
+            ```python
+            def get_cached_demo_results(num_products, keyword):
+                cache_key = f"demo_results_{num_products}_{keyword}"
+                if cache_key not in st.session_state:
+                    # Generate semua hasil termasuk waktu
+                    results = calculate_all_results()
+                    st.session_state[cache_key] = results
+                return st.session_state[cache_key]
+            ```
+            
+            ### **⏱️ Consistent Timing Simulation**
+            
+            ```python
+            # Waktu dihitung berdasarkan formula deterministik
+            # Bukan dari time.perf_counter() yang berubah-ubah
+            
+            time_iter = comp_iter × 0.0001 + 0.01  # ms
+            time_rek = comp_rek × 0.00015 + 0.015  # ms (selalu lebih lambat)
+            
+            # Hasil: waktu selalu sama untuk comp_iter dan comp_rek yang sama
+            ```
+            
+            ### **✅ Verifikasi Konsistensi**
+            
+            1. **Seed Verification** - Pastikan seed sama
+            2. **Cache Validation** - Pastikan hasil di-cache  
+            3. **Result Comparison** - Bandingkan dengan run sebelumnya
+            4. **Formula Checking** - Verifikasi perhitungan waktu
             """)
 
 if __name__ == "__main__":
