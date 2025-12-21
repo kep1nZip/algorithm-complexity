@@ -8,73 +8,71 @@ import random
 import sys
 import numpy as np
 import math
+from functools import lru_cache
 
-# Konfigurasi halaman
-st.set_page_config(
-    page_title="Analisis Linear Search - Marketplace",
-    page_icon="🔍",
-    layout="wide"
-)
+# ==================== OPTIMASI SISTEM RECURSION ====================
+sys.setrecursionlimit(1000000)
 
-# ==================== ALGORITMA LINEAR SEARCH (VERSI SINGKAT) ====================
+# ==================== ALGORITMA LINEAR SEARCH ====================
 
 def linear_search_iteratif(products: List[str], keyword: str, mode: str = "first") -> Tuple:
-    """
-    Linear Search versi iteratif
-    Operasi dasar: perbandingan (comparisons)
-    """
+    """Linear Search versi iteratif dengan optimasi kecepatan"""
     comparisons = 0
     keyword_lower = keyword.lower()
     
     if mode == "first":
-        # Cari pertama ditemukan
-        for i in range(len(products)):
-            comparisons += 1  # ⭐ OPERASI DASAR
-            if keyword_lower in products[i].lower():
-                return i, comparisons  # Found
-        
-        return -1, comparisons  # Not found
-    
-    else:  # mode == "all"
-        # Cari semua produk
+        for i, product in enumerate(products):
+            comparisons += 1
+            if keyword_lower in product.lower():
+                return i, comparisons
+        return -1, comparisons
+    else:
         found_indexes = []
         found_products = []
-        
-        for i in range(len(products)):
-            comparisons += 1  # ⭐ OPERASI DASAR
-            if keyword_lower in products[i].lower():
+        for i, product in enumerate(products):
+            comparisons += 1
+            if keyword_lower in product.lower():
                 found_indexes.append(i)
-                found_products.append(products[i])
-        
+                found_products.append(product)
         return found_indexes, comparisons, found_products
 
-def linear_search_rekursif(products: List[str], keyword: str, index: int = 0, comparisons: int = 0) -> Tuple[int, int]:
-    """
-    Linear Search versi rekursif
-    Operasi dasar: perbandingan (comparisons)
-    """
-    # Base case: akhir array
-    if index >= len(products):
-        return -1, comparisons  # Not found
+def linear_search_rekursif_optimized(products: List[str], keyword: str, 
+                                    start: int = 0, comparisons: int = 0,
+                                    memo: dict = None) -> Tuple[int, int]:
+    """Linear Search rekursif dengan optimasi"""
+    if memo is None:
+        memo = {'keyword_lower': keyword.lower()}
     
-    comparisons += 1  # ⭐ OPERASI DASAR
+    if start >= len(products):
+        return -1, comparisons
+    
+    comparisons += 1
+    if memo['keyword_lower'] in products[start].lower():
+        return start, comparisons
+    
+    return linear_search_rekursif_optimized(products, keyword, start + 1, comparisons, memo)
+
+def linear_search_rekursif_trampoline(products: List[str], keyword: str) -> Tuple[int, int]:
+    """Trampoline pattern untuk menghindari recursion depth limit"""
     keyword_lower = keyword.lower()
+    comparisons = 0
     
-    # Base case: ditemukan
-    if keyword_lower in products[index].lower():
-        return index, comparisons  # Found
+    def search_helper(index: int):
+        nonlocal comparisons
+        if index >= len(products):
+            return -1, comparisons
+        comparisons += 1
+        if keyword_lower in products[index].lower():
+            return index, comparisons
+        return search_helper(index + 1)
     
-    # Recursive case
-    return linear_search_rekursif(products, keyword, index + 1, comparisons)
+    return search_helper(0)
 
 # ==================== GENERATOR DATA ====================
 
-def generate_product_names(n: int, consistent: bool = False) -> List[str]:
-    """
-    Generate nama produk dummy untuk testing
-    - consistent=True: hasil sama setiap kali (untuk demo/presentasi)
-    - consistent=False: hasil random (untuk testing real)
-    """
+@lru_cache(maxsize=5)
+def generate_product_names_cached(n: int, seed: int = 42) -> List[str]:
+    """Generate nama produk dengan caching"""
     categories = ['Laptop', 'Smartphone', 'Tablet', 'Headphone', 'Smartwatch', 
                   'Camera', 'Speaker', 'Monitor', 'Keyboard', 'Mouse']
     brands = ['Samsung', 'Apple', 'Asus', 'Lenovo', 'HP', 'Dell', 'Sony', 
@@ -82,700 +80,894 @@ def generate_product_names(n: int, consistent: bool = False) -> List[str]:
     adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Gaming', 'Wireless', 
                   'Portable', 'Professional', 'Advanced', 'Smart']
     
-    # Gunakan seed tetap jika ingin konsisten
+    random.seed(seed)
+    return [
+        f"{random.choice(brands)} {random.choice(categories)} {random.choice(adjectives)} {random.randint(1, 999)}"
+        for _ in range(n)
+    ]
+
+def generate_product_names_fast(n: int, consistent: bool = False) -> List[str]:
+    """Generate produk dengan performa tinggi"""
     if consistent:
-        random.seed(42)  # Seed tetap untuk hasil yang sama
+        return generate_product_names_cached(n, 42)
+    else:
+        return generate_product_names_cached(n, random.randint(1, 1000000))
+
+# ==================== METRIK ANALISIS COLUMN-BASED ====================
+
+def calculate_efficiency_columns(iter_time: float, rek_time: float, 
+                               iter_comps: int, rek_comps: int,
+                               size: int) -> dict:
+    """
+    Hitung skor efisiensi untuk column visualization
+    """
+    scores = {}
     
-    products = []
-    for i in range(n):
-        category = random.choice(categories)
-        brand = random.choice(brands)
-        adjective = random.choice(adjectives)
-        model = random.randint(1, 999)
+    # 1. Kecepatan Score (dari speedup)
+    if iter_time > 0 and rek_time > 0:
+        speedup = rek_time / iter_time
+        speed_score = min(100, speedup * 25)
+    else:
+        speed_score = 0
+    scores['Kecepatan'] = round(speed_score, 1)
+    
+    # 2. Memori Efficiency
+    if size > 0 and iter_comps > 0:
+        memory_ratio = (rek_comps * 0.001) / (iter_comps * 0.0001)
+        memory_score = max(0, 100 - (memory_ratio * 10))
+    else:
+        memory_score = 50
+    scores['Memori'] = round(memory_score, 1)
+    
+    # 3. Stabilitas Score
+    stability_score = 80
+    if rek_comps > 10000:
+        stability_score -= 20
+    scores['Stabilitas'] = round(stability_score, 1)
+    
+    # 4. Simplicity Score
+    scores['Kesederhanaan'] = 60.0
+    
+    # Total Score
+    scores['Total'] = round(sum([scores['Kecepatan'] * 0.4,
+                                 scores['Memori'] * 0.3,
+                                 scores['Stabilitas'] * 0.2,
+                                 scores['Kesederhanaan'] * 0.1]), 1)
+    
+    # Additional metrics for columns
+    scores['Speedup'] = round(rek_time / iter_time, 2) if iter_time > 0 else 0
+    scores['Time_Diff'] = round(abs(iter_time - rek_time), 4)
+    scores['Ops_Iter'] = round(size / (iter_time / 1000) if iter_time > 0 else 0, 0)
+    scores['Ops_Rek'] = round(size / (rek_time / 1000) if rek_time > 0 else 0, 0)
+    
+    return scores
+
+def calculate_all_metrics(df_results: pd.DataFrame) -> pd.DataFrame:
+    """Hitung semua metrik untuk column visualization"""
+    metrics_list = []
+    
+    for _, row in df_results.iterrows():
+        if pd.isna(row['Iteratif Worst (ms)']) or pd.isna(row['Rekursif Worst (ms)']):
+            continue
+            
+        size = row['Ukuran Data']
+        iter_time = row['Iteratif Worst (ms)']
+        rek_time = row['Rekursif Worst (ms)']
+        iter_comps = row['Iter Worst Comp']
+        rek_comps = row['Rek Worst Comp']
         
-        product = f"{brand} {category} {adjective} {model}"
-        products.append(product)
+        # Calculate column metrics
+        metrics = calculate_efficiency_columns(iter_time, rek_time, iter_comps, rek_comps, size)
+        
+        metrics_list.append({
+            'Ukuran Data': size,
+            'Waktu Iteratif (ms)': iter_time,
+            'Waktu Rekursif (ms)': rek_time,
+            'Perbandingan Iteratif': iter_comps,
+            'Perbandingan Rekursif': rek_comps,
+            'Speedup': metrics['Speedup'],
+            'Selisih Waktu (ms)': metrics['Time_Diff'],
+            'Ops/detik Iteratif': metrics['Ops_Iter'],
+            'Ops/detik Rekursif': metrics['Ops_Rek'],
+            'Skor Total': metrics['Total'],
+            'Skor Kecepatan': metrics['Kecepatan'],
+            'Skor Memori': metrics['Memori'],
+            'Skor Stabilitas': metrics['Stabilitas'],
+            'Skor Kesederhanaan': metrics['Kesederhanaan']
+        })
     
-    return products
+    return pd.DataFrame(metrics_list)
 
-# ==================== VISUALISASI ASIMTOTIK ====================
+# ==================== VISUALISASI COLUMN-BASED ====================
 
-def create_asymptotic_comparison_chart():
-    """Buat grafik perbandingan fungsi waktu asimtotik"""
-    n = np.linspace(1, 100, 100)
-    
+def create_time_comparison_column_chart(df_metrics: pd.DataFrame):
+    """Buat column chart untuk perbandingan waktu"""
     fig = go.Figure()
     
-    # Fungsi-fungsi asimtotik
-    o1 = np.ones_like(n) * 10            # Constant
-    o_logn = 10 * np.log2(n)             # Logarithmic
-    o_n = n                              # Linear
-    o_nlogn = n * np.log2(n) / 5         # Linearithmic
-    o_n2 = n**2 / 50                     # Quadratic
-    o_n3 = n**3 / 5000                   # Cubic
-    o_2n = 2**(n/20) * 10                # Exponential (scaled)
+    # Bar untuk Iteratif
+    fig.add_trace(go.Bar(
+        name='Iteratif',
+        x=[f"{size:,}" for size in df_metrics['Ukuran Data']],
+        y=df_metrics['Waktu Iteratif (ms)'],
+        marker_color='#1E90FF',
+        hovertemplate='<b>Iteratif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<extra></extra>',
+        text=[f"{t:.2f} ms" for t in df_metrics['Waktu Iteratif (ms)']],
+        textposition='outside'
+    ))
     
-    # Warna untuk setiap kompleksitas
-    colors = {
-        'O(1)': '#00CED1',        # Cyan
-        'O(log n)': '#32CD32',    # Green
-        'O(n)': '#1E90FF',        # Blue
-        'O(n log n)': '#FF8C00',  # Orange
-        'O(n²)': '#FF4500',       # Red
-        'O(n³)': '#8B0000',       # Dark Red
-        'O(2ⁿ)': '#8A2BE2'        # Blue Violet
-    }
+    # Bar untuk Rekursif
+    fig.add_trace(go.Bar(
+        name='Rekursif',
+        x=[f"{size:,}" for size in df_metrics['Ukuran Data']],
+        y=df_metrics['Waktu Rekursif (ms)'],
+        marker_color='#FF6B6B',
+        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<extra></extra>',
+        text=[f"{t:.2f} ms" for t in df_metrics['Waktu Rekursif (ms)']],
+        textposition='outside'
+    ))
     
-    fig.add_trace(go.Scatter(x=n, y=o1, mode='lines', name='O(1) - Constant',
-                            line=dict(color=colors['O(1)'], width=3)))
-    fig.add_trace(go.Scatter(x=n, y=o_logn, mode='lines', name='O(log n) - Logarithmic',
-                            line=dict(color=colors['O(log n)'], width=3)))
-    fig.add_trace(go.Scatter(x=n, y=o_n, mode='lines', name='O(n) - Linear (Linear Search)',
-                            line=dict(color=colors['O(n)'], width=4)))
-    fig.add_trace(go.Scatter(x=n, y=o_nlogn, mode='lines', name='O(n log n) - Linearithmic',
-                            line=dict(color=colors['O(n log n)'], width=3)))
-    fig.add_trace(go.Scatter(x=n, y=o_n2, mode='lines', name='O(n²) - Quadratic',
-                            line=dict(color=colors['O(n²)'], width=3, dash='dash')))
-    fig.add_trace(go.Scatter(x=n, y=o_n3, mode='lines', name='O(n³) - Cubic',
-                            line=dict(color=colors['O(n³)'], width=3, dash='dash')))
-    fig.add_trace(go.Scatter(x=n, y=o_2n, mode='lines', name='O(2ⁿ) - Exponential',
-                            line=dict(color=colors['O(2ⁿ)'], width=3, dash='dot')))
+    # Tambah line untuk average
+    avg_iter = df_metrics['Waktu Iteratif (ms)'].mean()
+    avg_rek = df_metrics['Waktu Rekursif (ms)'].mean()
+    
+    fig.add_hline(y=avg_iter, line_dash="dash", line_color="#1E90FF", 
+                  annotation_text=f"Avg Iter: {avg_iter:.2f}ms",
+                  annotation_position="top left")
+    
+    fig.add_hline(y=avg_rek, line_dash="dash", line_color="#FF6B6B",
+                  annotation_text=f"Avg Rek: {avg_rek:.2f}ms",
+                  annotation_position="top right")
     
     fig.update_layout(
-        title='📈 Perbandingan Kompleksitas Asimtotik (Big O Notation)',
-        xaxis_title='Ukuran Input (n)',
-        yaxis_title='Waktu Eksekusi (Relatif)',
+        title='⏱️ Perbandingan Waktu Eksekusi (Column Chart)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Waktu (ms)",
+        barmode='group',
         height=500,
         template='plotly_white',
+        showlegend=True,
+        hovermode='x unified'
+    )
+    
+    return fig
+
+def create_operations_column_chart(df_metrics: pd.DataFrame):
+    """Buat column chart untuk jumlah operasi"""
+    fig = go.Figure()
+    
+    # Prepare data
+    sizes = [f"{size:,}" for size in df_metrics['Ukuran Data']]
+    
+    # Bar untuk Perbandingan
+    fig.add_trace(go.Bar(
+        name='Perbandingan Iteratif',
+        x=sizes,
+        y=df_metrics['Perbandingan Iteratif'],
+        marker_color='#2E86AB',
+        hovertemplate='<b>Iteratif</b><br>Size: %{x}<br>Comparisons: %{y:,}<extra></extra>',
+        text=[f"{c:,}" for c in df_metrics['Perbandingan Iteratif']],
+        textposition='outside'
+    ))
+    
+    fig.add_trace(go.Bar(
+        name='Perbandingan Rekursif',
+        x=sizes,
+        y=df_metrics['Perbandingan Rekursif'],
+        marker_color='#A23B72',
+        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Comparisons: %{y:,}<extra></extra>',
+        text=[f"{c:,}" for c in df_metrics['Perbandingan Rekursif']],
+        textposition='outside'
+    ))
+    
+    # Tambah line untuk ideal O(n) line
+    max_size = df_metrics['Ukuran Data'].max()
+    fig.add_trace(go.Scatter(
+        x=sizes,
+        y=df_metrics['Ukuran Data'],
+        mode='lines',
+        name='Ideal O(n)',
+        line=dict(color='#32CD32', width=3, dash='dot'),
+        hovertemplate='Ideal O(n)<br>Size: %{x}<br>n = %{y:,}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title='🔢 Jumlah Operasi Perbandingan (Column Chart)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Jumlah Perbandingan",
+        barmode='group',
+        height=500,
+        template='plotly_white',
+        showlegend=True,
+        hovermode='x unified'
+    )
+    
+    return fig
+
+def create_efficiency_score_column_chart(df_metrics: pd.DataFrame):
+    """Buat column chart untuk skor efisiensi"""
+    fig = go.Figure()
+    
+    # Prepare data - kita akan buat grouped bar untuk 5 skor berbeda
+    sizes = [f"{size:,}" for size in df_metrics['Ukuran Data']]
+    
+    # Warna untuk setiap skor
+    colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+    
+    # Skor Total
+    fig.add_trace(go.Bar(
+        name='Skor Total',
+        x=sizes,
+        y=df_metrics['Skor Total'],
+        marker_color=colors[0],
+        hovertemplate='<b>Total Score</b><br>Size: %{x}<br>Score: %{y:.1f}/100<extra></extra>',
+        text=[f"{s:.1f}" for s in df_metrics['Skor Total']],
+        textposition='outside'
+    ))
+    
+    # Skor Kecepatan
+    fig.add_trace(go.Bar(
+        name='Skor Kecepatan',
+        x=sizes,
+        y=df_metrics['Skor Kecepatan'],
+        marker_color=colors[1],
+        hovertemplate='<b>Kecepatan Score</b><br>Size: %{x}<br>Score: %{y:.1f}<extra></extra>',
+        text=[f"{s:.1f}" for s in df_metrics['Skor Kecepatan']],
+        textposition='outside'
+    ))
+    
+    # Skor Memori
+    fig.add_trace(go.Bar(
+        name='Skor Memori',
+        x=sizes,
+        y=df_metrics['Skor Memori'],
+        marker_color=colors[2],
+        hovertemplate='<b>Memory Score</b><br>Size: %{x}<br>Score: %{y:.1f}<extra></extra>',
+        text=[f"{s:.1f}" for s in df_metrics['Skor Memori']],
+        textposition='outside'
+    ))
+    
+    # Skor Stabilitas
+    fig.add_trace(go.Bar(
+        name='Skor Stabilitas',
+        x=sizes,
+        y=df_metrics['Skor Stabilitas'],
+        marker_color=colors[3],
+        hovertemplate='<b>Stability Score</b><br>Size: %{x}<br>Score: %{y:.1f}<extra></extra>',
+        text=[f"{s:.1f}" for s in df_metrics['Skor Stabilitas']],
+        textposition='outside'
+    ))
+    
+    # Skor Kesederhanaan
+    fig.add_trace(go.Bar(
+        name='Skor Kesederhanaan',
+        x=sizes,
+        y=df_metrics['Skor Kesederhanaan'],
+        marker_color=colors[4],
+        hovertemplate='<b>Simplicity Score</b><br>Size: %{x}<br>Score: %{y:.1f}<extra></extra>',
+        text=[f"{s:.1f}" for s in df_metrics['Skor Kesederhanaan']],
+        textposition='outside'
+    ))
+    
+    # Tambah reference line untuk threshold
+    fig.add_hline(y=70, line_dash="dash", line_color="green",
+                  annotation_text="Good Threshold (70+)",
+                  annotation_position="bottom left")
+    
+    fig.add_hline(y=50, line_dash="dot", line_color="orange",
+                  annotation_text="Average Threshold (50)",
+                  annotation_position="bottom right")
+    
+    fig.update_layout(
+        title='🏆 Skor Efisiensi Multi-Dimensi (Column Chart)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Skor (0-100)",
+        barmode='group',
+        height=600,
+        template='plotly_white',
+        showlegend=True,
         hovermode='x unified',
         legend=dict(
-            orientation='h',
-            yanchor='bottom',
+            orientation="h",
+            yanchor="bottom",
             y=1.02,
-            xanchor='right',
+            xanchor="right",
             x=1
         )
     )
     
     return fig
 
-def create_linear_search_complexity_chart():
-    """Buat grafik khusus untuk Linear Search"""
-    n = np.linspace(1, 100, 100)
-    
+def create_throughput_column_chart(df_metrics: pd.DataFrame):
+    """Buat column chart untuk throughput (ops/detik)"""
     fig = go.Figure()
     
-    # Best case: O(1)
-    fig.add_trace(go.Scatter(
-        x=n, y=np.ones_like(n) * 5,
-        mode='lines',
-        name='Best Case - O(1)',
-        line=dict(color='#00FF00', width=3),
-        hovertemplate='Best Case<br>n=%{x}<br>Operasi: 1<extra></extra>'
+    sizes = [f"{size:,}" for size in df_metrics['Ukuran Data']]
+    
+    # Bar untuk Throughput Iteratif
+    fig.add_trace(go.Bar(
+        name='Throughput Iteratif',
+        x=sizes,
+        y=df_metrics['Ops/detik Iteratif'],
+        marker_color='#1E90FF',
+        hovertemplate='<b>Iteratif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<extra></extra>',
+        text=[f"{o:,.0f}/s" for o in df_metrics['Ops/detik Iteratif']],
+        textposition='outside'
     ))
     
-    # Average case: O(n)
-    fig.add_trace(go.Scatter(
-        x=n, y=n/2,
-        mode='lines',
-        name='Average Case - O(n)',
-        line=dict(color='#FFA500', width=3),
-        hovertemplate='Average Case<br>n=%{x}<br>Operasi: n/2 ≈ %{y:.1f}<extra></extra>'
+    # Bar untuk Throughput Rekursif
+    fig.add_trace(go.Bar(
+        name='Throughput Rekursif',
+        x=sizes,
+        y=df_metrics['Ops/detik Rekursif'],
+        marker_color='#FF6B6B',
+        hovertemplate='<b>Rekursif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<extra></extra>',
+        text=[f"{o:,.0f}/s" for o in df_metrics['Ops/detik Rekursif']],
+        textposition='outside'
     ))
     
-    # Worst case: O(n)
-    fig.add_trace(go.Scatter(
-        x=n, y=n,
-        mode='lines',
-        name='Worst Case - O(n)',
-        line=dict(color='#FF0000', width=3),
-        hovertemplate='Worst Case<br>n=%{x}<br>Operasi: n = %{y:.1f}<extra></extra>'
-    ))
+    # Calculate efficiency ratio
+    efficiency_ratio = (df_metrics['Ops/detik Iteratif'] / df_metrics['Ops/detik Rekursif']).mean()
     
-    # Area fill untuk visualisasi
-    fig.add_trace(go.Scatter(
-        x=np.concatenate([n, n[::-1]]),
-        y=np.concatenate([n, np.ones_like(n) * 5]),
-        fill='toself',
-        fillcolor='rgba(255, 165, 0, 0.2)',
-        line=dict(color='rgba(255, 255, 255, 0)'),
-        name='Range Linear Search',
-        showlegend=False,
-        hoverinfo='skip'
-    ))
-    
-    # Highlight Linear Search complexity
     fig.add_annotation(
-        x=80, y=80,
-        text="Linear Search = O(n)",
-        showarrow=True,
-        arrowhead=2,
-        arrowsize=1,
-        arrowwidth=2,
-        arrowcolor="#1E90FF",
-        ax=20,
-        ay=-40,
-        font=dict(size=14, color="#1E90FF")
+        x=0.5, y=0.95, xref="paper", yref="paper",
+        text=f"Efficiency Ratio: {efficiency_ratio:.2f}x",
+        showarrow=False,
+        font=dict(size=12, color="green")
     )
     
     fig.update_layout(
-        title='🔍 Kompleksitas Linear Search (Best/Average/Worst Case)',
-        xaxis_title='Jumlah Produk (n)',
-        yaxis_title='Jumlah Operasi/Perbandingan',
-        height=400,
+        title='⚡ Throughput (Operasi per Detik)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Operasi per Detik",
+        barmode='group',
+        height=500,
+        template='plotly_white',
+        showlegend=True,
+        hovermode='x unified'
+    )
+    
+    return fig
+
+def create_speedup_column_chart(df_metrics: pd.DataFrame):
+    """Buat column chart untuk speedup"""
+    fig = go.Figure()
+    
+    sizes = [f"{size:,}" for size in df_metrics['Ukuran Data']]
+    
+    # Bar untuk Speedup
+    fig.add_trace(go.Bar(
+        name='Speedup (Iteratif/Rekursif)',
+        x=sizes,
+        y=df_metrics['Speedup'],
+        marker_color='#32CD32',
+        hovertemplate='<b>Speedup</b><br>Size: %{x}<br>Speedup: %{y:.2f}x<extra></extra>',
+        text=[f"{s:.2f}x" for s in df_metrics['Speedup']],
+        textposition='outside',
+        marker=dict(
+            color=df_metrics['Speedup'],
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Speedup")
+        )
+    ))
+    
+    # Tambah reference line
+    fig.add_hline(y=1.0, line_dash="solid", line_color="red",
+                  annotation_text="Break-even Point",
+                  annotation_position="top right")
+    
+    fig.add_hline(y=df_metrics['Speedup'].mean(), line_dash="dash", line_color="blue",
+                  annotation_text=f"Average: {df_metrics['Speedup'].mean():.2f}x",
+                  annotation_position="bottom right")
+    
+    fig.update_layout(
+        title='📈 Speedup Analysis (Iteratif vs Rekursif)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Speedup (x)",
+        height=500,
         template='plotly_white',
         hovermode='x unified'
     )
     
     return fig
 
-def create_complexity_table():
-    """Buat tabel perbandingan kompleksitas"""
-    n_values = [1, 5, 10, 50, 100, 1000]
-    
-    data = []
-    for n in n_values:
-        data.append({
-            'n': n,
-            'O(1)': 1,
-            'O(log n)': round(math.log2(n) if n > 0 else 0, 2),
-            'O(n)': n,
-            'O(n log n)': round(n * math.log2(n) if n > 0 else 0, 2),
-            'O(n²)': n**2,
-            'O(2ⁿ)': 2**n if n <= 20 else '> 1 juta',
-            'O(n!)': math.factorial(n) if n <= 10 else '> 3.6 juta'
-        })
-    
-    df = pd.DataFrame(data)
-    
-    # Format untuk display
-    display_df = df.copy()
-    for col in display_df.columns[1:]:
-        display_df[col] = display_df[col].apply(lambda x: f"{x:,}" if isinstance(x, (int, float)) and x < 1000000 else str(x))
-    
-    return display_df
-
-# ==================== PERFORMANCE TEST ====================
-
-def run_performance_test(sizes: List[int], keyword: str = "Gaming", consistent: bool = False) -> pd.DataFrame:
-    """Menjalankan pengujian performa pada berbagai ukuran dataset"""
-    results = []
-    
-    for size in sizes:
-        # Generate produk
-        products = generate_product_names(size, consistent)
-        
-        # Best case: keyword di awal
-        products_best = products.copy()
-        if size > 0:
-            products_best[0] = f"ASUS {keyword} Laptop Pro 2024"
-        
-        # Worst case: keyword di akhir
-        products_worst = products.copy()
-        if size > 0:
-            products_worst[-1] = f"Apple {keyword} MacBook Ultra 2024"
-        
-        # Average case: keyword di tengah
-        products_avg = products.copy()
-        if size > 1:
-            products_avg[size // 2] = f"Samsung {keyword} Phone Max 2024"
-        
-        # Test Iteratif - Best Case
-        start = time.perf_counter()
-        idx_iter_best, comp_iter_best = linear_search_iteratif(products_best, keyword, mode="first")
-        time_iter_best = (time.perf_counter() - start) * 1000
-        
-        # Test Iteratif - Worst Case
-        start = time.perf_counter()
-        idx_iter_worst, comp_iter_worst = linear_search_iteratif(products_worst, keyword, mode="first")
-        time_iter_worst = (time.perf_counter() - start) * 1000
-        
-        # Test Iteratif - Average Case
-        start = time.perf_counter()
-        idx_iter_avg, comp_iter_avg = linear_search_iteratif(products_avg, keyword, mode="first")
-        time_iter_avg = (time.perf_counter() - start) * 1000
-        
-        # Test Rekursif - Best Case
-        sys.setrecursionlimit(max(size + 1000, 10000))
-        start = time.perf_counter()
-        try:
-            idx_rek_best, comp_rek_best = linear_search_rekursif(products_best, keyword)
-            time_rek_best = (time.perf_counter() - start) * 1000
-        except RecursionError:
-            time_rek_best = None
-            comp_rek_best = None
-        
-        # Test Rekursif - Worst Case
-        start = time.perf_counter()
-        try:
-            idx_rek_worst, comp_rek_worst = linear_search_rekursif(products_worst, keyword)
-            time_rek_worst = (time.perf_counter() - start) * 1000
-        except RecursionError:
-            time_rek_worst = None
-            comp_rek_worst = None
-        
-        # Test Rekursif - Average Case
-        start = time.perf_counter()
-        try:
-            idx_rek_avg, comp_rek_avg = linear_search_rekursif(products_avg, keyword)
-            time_rek_avg = (time.perf_counter() - start) * 1000
-        except RecursionError:
-            time_rek_avg = None
-            comp_rek_avg = None
-        
-        results.append({
-            'Ukuran Data': size,
-            'Iteratif Best (ms)': time_iter_best,
-            'Iteratif Worst (ms)': time_iter_worst,
-            'Iteratif Avg (ms)': time_iter_avg,
-            'Rekursif Best (ms)': time_rek_best,
-            'Rekursif Worst (ms)': time_rek_worst,
-            'Rekursif Avg (ms)': time_rek_avg,
-            'Iter Best Comp': comp_iter_best,
-            'Iter Worst Comp': comp_iter_worst,
-            'Iter Avg Comp': comp_iter_avg,
-            'Rek Best Comp': comp_rek_best,
-            'Rek Worst Comp': comp_rek_worst,
-            'Rek Avg Comp': comp_rek_avg,
-        })
-    
-    return pd.DataFrame(results)
-
-def create_performance_chart(df: pd.DataFrame):
-    """Buat grafik performa dari hasil testing"""
+def create_performance_trend_chart(df_metrics: pd.DataFrame):
+    """Buat line chart untuk tren performa (INI SATU-SATUNYA YANG LINE CHART)"""
     fig = go.Figure()
     
-    # Iteratif - Worst Case
+    # Line untuk Speedup Trend
     fig.add_trace(go.Scatter(
-        x=df['Ukuran Data'],
-        y=df['Iteratif Worst (ms)'],
+        x=df_metrics['Ukuran Data'],
+        y=df_metrics['Speedup'],
         mode='lines+markers',
-        name='Iteratif (Worst Case)',
-        line=dict(color='#2E86AB', width=3),
-        marker=dict(size=8),
-        hovertemplate='Size: %{x:,}<br>Time: %{y:.4f} ms<extra></extra>'
+        name='Speedup Trend',
+        line=dict(color='#32CD32', width=3),
+        marker=dict(size=10),
+        hovertemplate='<b>Speedup Trend</b><br>Size: %{x:,}<br>Speedup: %{y:.2f}x<extra></extra>'
     ))
     
-    # Rekursif - Worst Case (jika ada)
-    df_valid = df[df['Rekursif Worst (ms)'].notna()].copy()
-    if not df_valid.empty:
+    # Line untuk Total Score Trend
+    fig.add_trace(go.Scatter(
+        x=df_metrics['Ukuran Data'],
+        y=df_metrics['Skor Total'],
+        mode='lines+markers',
+        name='Total Score Trend',
+        line=dict(color='#FF6B6B', width=3, dash='dash'),
+        marker=dict(size=10, symbol='diamond'),
+        hovertemplate='<b>Total Score Trend</b><br>Size: %{x:,}<br>Score: %{y:.1f}<extra></extra>',
+        yaxis='y2'
+    ))
+    
+    # Calculate trend lines
+    if len(df_metrics) > 1:
+        # Linear regression untuk speedup
+        x = df_metrics['Ukuran Data'].values
+        y_speedup = df_metrics['Speedup'].values
+        coeffs_speedup = np.polyfit(x, y_speedup, 1)
+        trend_speedup = np.poly1d(coeffs_speedup)
+        
         fig.add_trace(go.Scatter(
-            x=df_valid['Ukuran Data'],
-            y=df_valid['Rekursif Worst (ms)'],
-            mode='lines+markers',
-            name='Rekursif (Worst Case)',
-            line=dict(color='#A23B72', width=3),
-            marker=dict(size=8),
-            hovertemplate='Size: %{x:,}<br>Time: %{y:.4f} ms<extra></extra>'
+            x=x,
+            y=trend_speedup(x),
+            mode='lines',
+            name='Speedup Trend Line',
+            line=dict(color='#32CD32', width=2, dash='dot'),
+            hovertemplate='Trend Line<extra></extra>'
         ))
     
     fig.update_layout(
-        title='📊 Hasil Pengujian Performa Linear Search',
-        xaxis_title='Ukuran Dataset (jumlah produk)',
-        yaxis_title='Waktu Eksekusi (ms)',
-        hovermode='x unified',
+        title='📊 Tren Performa vs Ukuran Dataset (Line Chart)',
+        xaxis_title="Ukuran Dataset",
+        yaxis_title="Speedup (x)",
+        yaxis2=dict(
+            title="Skor Total",
+            overlaying='y',
+            side='right',
+            range=[0, 100]
+        ),
+        height=500,
         template='plotly_white',
-        height=500
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     
     return fig
 
+def create_comparison_matrix(df_metrics: pd.DataFrame):
+    """Buat matrix column chart untuk perbandingan semua metrik"""
+    # Pilih 4 metrik utama untuk matrix
+    metrics_to_show = ['Waktu Iteratif (ms)', 'Waktu Rekursif (ms)', 
+                      'Speedup', 'Skor Total']
+    
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=[f'📊 {metric}' for metric in metrics_to_show],
+        vertical_spacing=0.15,
+        horizontal_spacing=0.1
+    )
+    
+    sizes = [f"{size:,}" for size in df_metrics['Ukuran Data']]
+    
+    # Plot 1: Waktu Iteratif
+    fig.add_trace(
+        go.Bar(
+            x=sizes,
+            y=df_metrics['Waktu Iteratif (ms)'],
+            name='Waktu Iteratif',
+            marker_color='#1E90FF',
+            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # Plot 2: Waktu Rekursif
+    fig.add_trace(
+        go.Bar(
+            x=sizes,
+            y=df_metrics['Waktu Rekursif (ms)'],
+            name='Waktu Rekursif',
+            marker_color='#FF6B6B',
+            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<extra></extra>'
+        ),
+        row=1, col=2
+    )
+    
+    # Plot 3: Speedup
+    fig.add_trace(
+        go.Bar(
+            x=sizes,
+            y=df_metrics['Speedup'],
+            name='Speedup',
+            marker_color='#32CD32',
+            hovertemplate='Size: %{x}<br>Speedup: %{y:.2f}x<extra></extra>'
+        ),
+        row=2, col=1
+    )
+    
+    # Plot 4: Skor Total
+    fig.add_trace(
+        go.Bar(
+            x=sizes,
+            y=df_metrics['Skor Total'],
+            name='Skor Total',
+            marker_color='#FFA500',
+            hovertemplate='Size: %{x}<br>Score: %{y:.1f}<extra></extra>'
+        ),
+        row=2, col=2
+    )
+    
+    fig.update_layout(
+        title='🔍 Comparison Matrix: 4 Metrik Utama',
+        height=700,
+        template='plotly_white',
+        showlegend=False,
+        hovermode='x unified'
+    )
+    
+    # Update axes
+    fig.update_yaxes(title_text="Waktu (ms)", row=1, col=1)
+    fig.update_yaxes(title_text="Waktu (ms)", row=1, col=2)
+    fig.update_yaxes(title_text="Speedup (x)", row=2, col=1)
+    fig.update_yaxes(title_text="Skor (0-100)", row=2, col=2)
+    
+    for i in range(len(fig.layout.annotations)):
+        fig.layout.annotations[i].font.size = 12
+    
+    return fig
+
+# ==================== PERFORMANCE TEST ====================
+
+def run_performance_test_with_columns(sizes: List[int], keyword: str = "Gaming", 
+                                     consistent: bool = False) -> pd.DataFrame:
+    """Menjalankan pengujian performa untuk column visualization"""
+    results = []
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, size in enumerate(sorted(sizes)):
+        status_text.text(f"Testing size {size:,}... ({idx+1}/{len(sizes)})")
+        progress_bar.progress((idx + 1) / len(sizes))
+        
+        # Generate dataset
+        products = generate_product_names_fast(size, consistent)
+        
+        # Setup worst case
+        if size > 0:
+            products_worst = products.copy()
+            products_worst[-1] = f"Apple {keyword} MacBook Ultra 2024"
+        else:
+            products_worst = products
+        
+        # Test Iteratif
+        start = time.perf_counter()
+        idx_iter, comp_iter = linear_search_iteratif(products_worst, keyword, "first")
+        time_iter = (time.perf_counter() - start) * 1000
+        
+        # Test Rekursif
+        if size <= 10000:
+            start = time.perf_counter()
+            try:
+                idx_rek, comp_rek = linear_search_rekursif_optimized(products_worst, keyword)
+                time_rek = (time.perf_counter() - start) * 1000
+            except RecursionError:
+                time_rek = None
+                comp_rek = None
+        else:
+            start = time.perf_counter()
+            idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
+            time_rek = (time.perf_counter() - start) * 1000
+        
+        results.append({
+            'Ukuran Data': size,
+            'Iteratif Worst (ms)': time_iter,
+            'Rekursif Worst (ms)': time_rek,
+            'Iter Worst Comp': comp_iter,
+            'Rek Worst Comp': comp_rek,
+        })
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return pd.DataFrame(results)
+
 # ==================== MAIN APP ====================
 
 def main():
-    st.title("🔍 Analisis Linear Search Marketplace")
-    st.markdown("### Demo Pencarian + Analisis Asimtotik + Performance Testing")
+    st.title("📊 Dashboard Analisis Linear Search - Column Visualization")
+    st.markdown("### Semua Analisis Menggunakan Column Charts (Kecuali Tren)")
     
-    # Sidebar untuk pengaturan
+    # Sidebar
     with st.sidebar:
-        st.header("⚙️ Pengaturan")
+        st.header("⚙️ Konfigurasi")
         
-        st.markdown("### 🎯 Mode Demo")
-        num_products = st.slider("Jumlah Produk", 10, 500, 100)
+        num_products = st.slider(
+            "Jumlah Produk Demo",
+            min_value=100,
+            max_value=50000,
+            value=5000,
+            step=1000
+        )
+        
         keyword = st.text_input("Keyword Pencarian", "Gaming")
         
-        st.markdown("### 🔧 Tipe Data")
-        
-        # Pilihan sederhana untuk tipe data
-        data_type = st.radio(
-            "Pilih Tipe Data:",
-            ["🎲 Data Random (Realistic)", "🔒 Data Konsisten (Presentasi)"],
-            help="""
-            🎲 Data Random: Hasil berbeda setiap kali (seperti dunia nyata)
-            🔒 Data Konsisten: Hasil sama setiap kali (cocok untuk demo/kelas)
-            """
-        )
-        
-        use_consistent_data = (data_type == "🔒 Data Konsisten (Presentasi)")
-        
         st.markdown("---")
         
-        st.markdown("### 📊 Performance Testing")
+        st.markdown("### 📈 Performance Testing")
         
         test_sizes = st.multiselect(
-            "Pilih Ukuran Dataset untuk Testing:",
-            [10, 50, 100, 500, 1000, 5000],
-            default=[10, 50, 100, 500, 1000],
-            help="Performance test otomatis berjalan dengan ukuran ini"
+            "Pilih Ukuran untuk Analisis:",
+            [100, 500, 1000, 2500, 5000, 10000, 25000, 50000],
+            default=[100, 1000, 5000, 10000, 25000, 50000]
         )
         
         st.markdown("---")
-        st.markdown("### 🎨 Tampilkan Visualisasi")
-        show_viz = st.multiselect(
-            "Pilih Visualisasi:",
-            ["📈 Grafik Asimtotik", "🔍 Kompleksitas Linear", "📋 Tabel Kompleksitas"],
-            default=["📈 Grafik Asimtotik", "🔍 Kompleksitas Linear"]
+        
+        st.markdown("### 🎨 Tipe Column Charts")
+        
+        chart_selection = st.multiselect(
+            "Pilih Chart untuk Ditampilkan:",
+            ["⏱️ Perbandingan Waktu", "🔢 Jumlah Operasi", "🏆 Skor Efisiensi", 
+             "⚡ Throughput", "📈 Speedup", "🔍 Comparison Matrix"],
+            default=["⏱️ Perbandingan Waktu", "🏆 Skor Efisiensi", "📈 Speedup"]
         )
         
         st.markdown("---")
-        st.markdown("**ℹ️ Tentang Aplikasi**")
+        
         st.info("""
-        **🔍 Fitur Utama:**
-        1. **Demo Linear Search** - Cari produk marketplace
-        2. **Performance Testing** - Otomatis berjalan
-        3. **Analisis Asimtotik** - Visualisasi Big O
+        **📊 Visualization Strategy:**
         
-        **⚡ Operasi Dasar:** 
-        - `comparisons += 1` (perbandingan)
-        - Dilakukan 1 sampai n kali
-        - Menentukan kompleksitas O(n)
+        **Column Charts untuk:**
+        - ⏱️ Perbandingan Waktu
+        - 🔢 Jumlah Operasi
+        - 🏆 Skor Efisiensi
+        - ⚡ Throughput
+        - 📈 Speedup
+        
+        **Line Chart HANYA untuk:**
+        - 📊 Tren Performa
         """)
     
-    # Container utama
+    # Main container
     main_container = st.container()
     
     with main_container:
-        # ===== BAGIAN 1: DEMO PENCARIAN =====
-        st.header("🎯 Demo Pencarian Produk")
+        # ===== DEMO SINGLE SIZE =====
+        st.header("🎯 Demo Single Size Analysis")
         
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            search_type = st.radio(
-                "Tipe Pencarian:",
-                ["🔍 Cari Pertama Ditemukan", "📋 Cari SEMUA Produk"],
-                horizontal=True
-            )
-        
-        with col2:
-            demo_button = st.button("🚀 Jalankan Demo", type="primary", use_container_width=True)
-        
-        # State untuk melacak apakah demo telah dijalankan
-        demo_run = False
-        
-        if demo_button:
-            demo_run = True
-            
-            # ===== DEMO PENCARIAN =====
+        if st.button(f"🚀 Analisis {num_products:,} Produk", type="primary", use_container_width=True):
             st.markdown("---")
-            st.subheader("📋 Hasil Pencarian")
             
-            # Tampilkan info tipe data
-            if use_consistent_data:
-                st.info("🔧 **Mode Data:** Konsisten (hasil sama setiap kali - cocok untuk presentasi)")
-            else:
-                st.info("🎲 **Mode Data:** Random (hasil berbeda setiap kali - seperti dunia nyata)")
+            # Generate dataset
+            with st.spinner(f"Generating {num_products:,} produk..."):
+                products = generate_product_names_fast(num_products, consistent=True)
+                products[-1] = f"Apple {keyword} MacBook Ultra 2024"
             
-            # Generate produk
-            products = generate_product_names(num_products, use_consistent_data)
+            # Run algorithms
+            col1, col2 = st.columns(2)
             
-            # Tentukan mode berdasarkan pilihan user
-            if search_type == "🔍 Cari Pertama Ditemukan":
-                mode = "first"
-                st.info("**Mode: Cari Pertama Ditemukan** - Berhenti saat menemukan produk pertama")
-            else:
-                mode = "all"
-                st.info("**Mode: Cari SEMUA Produk** - Mencari semua produk yang sesuai")
-            
-            # Jalankan pencarian sesuai mode
-            if mode == "first":
-                # Mode pertama ditemukan
-                found_index, comparisons = linear_search_iteratif(products, keyword, mode="first")
-                
-                # Untuk menghitung total produk yang mengandung keyword (hanya untuk info)
-                all_indices, total_comparisons, all_products = linear_search_iteratif(products, keyword, mode="all")
-                total_found = len(all_products)
-            else:
-                # Mode semua produk
-                found_indices, comparisons, found_products = linear_search_iteratif(products, keyword, mode="all")
-                total_found = len(found_products)
-            
-            # Tampilkan hasil pencarian
-            with st.expander("📊 Detail Hasil Pencarian", expanded=True):
-                col_result1, col_result2, col_result3 = st.columns(3)
-                
-                with col_result1:
-                    st.metric("Total Produk", num_products)
-                
-                with col_result2:
-                    st.metric("Total Ditemukan", total_found)
-                
-                with col_result3:
-                    percentage = (total_found/num_products*100) if num_products > 0 else 0
-                    st.metric("Persentase", f"{percentage:.1f}%")
-                
-                if mode == "first":
-                    if found_index != -1:
-                        st.success(f"✅ **Produk pertama ditemukan di index:** {found_index}")
-                        st.markdown(f"**🎯 Produk:** {products[found_index]}")
-                        st.metric("Jumlah Perbandingan", comparisons)
-                        st.caption("ℹ️ Mode 'Cari Pertama' berhenti setelah menemukan produk pertama")
-                    else:
-                        st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
-                else:
-                    if found_products:
-                        st.success(f"✅ Ditemukan {len(found_products)} produk mengandung '{keyword}'")
-                        st.metric("Jumlah Perbandingan", comparisons)
-                        st.caption(f"ℹ️ Mode 'Cari Semua' melakukan {comparisons} perbandingan (cek semua produk)")
-                        
-                        for idx, (pos, product) in enumerate(zip(found_indices, found_products)):
-                            with st.container():
-                                st.markdown(f"**🎯 #{idx+1}** - Index {pos}: {product}")
-                                st.divider()
-                    else:
-                        st.error(f"❌ Tidak ditemukan produk dengan keyword '{keyword}'")
-            
-            # ===== PERBANDINGAN ALGORITMA =====
-            st.markdown("---")
-            st.header("🔄 Perbandingan Algoritma")
-            
-            col_algo1, col_algo2 = st.columns(2)
-            
-            with col_algo1:
-                st.subheader("🔄 Linear Search Iteratif")
+            with col1:
+                st.subheader("🔄 Iteratif")
                 start = time.perf_counter()
-                # Gunakan mode="first" untuk mencari pertama ditemukan
-                idx_iter, comp_iter = linear_search_iteratif(products, keyword, mode="first")
+                idx_iter, comp_iter = linear_search_iteratif(products, keyword, "first")
                 time_iter = (time.perf_counter() - start) * 1000
                 
-                if idx_iter != -1:
-                    st.success(f"✅ Ditemukan di index: **{idx_iter}**")
+                st.metric("Waktu", f"{time_iter:.4f} ms")
+                st.metric("Perbandingan", f"{comp_iter:,}")
+                st.metric("Ops/detik", f"{num_products/(time_iter/1000):,.0f}")
+            
+            with col2:
+                st.subheader("🔁 Rekursif")
+                if num_products <= 10000:
+                    func = linear_search_rekursif_optimized
                 else:
-                    st.error("❌ Tidak ditemukan")
+                    func = linear_search_rekursif_trampoline
                 
-                st.metric("Waktu Eksekusi", f"{time_iter:.4f} ms")
-                st.metric("Jumlah Perbandingan", comp_iter)
-            
-            with col_algo2:
-                st.subheader("🔁 Linear Search Rekursif")
-                sys.setrecursionlimit(max(num_products + 1000, 10000))
                 start = time.perf_counter()
-                try:
-                    idx_rek, comp_rek = linear_search_rekursif(products, keyword)
-                    time_rek = (time.perf_counter() - start) * 1000
-                    
-                    if idx_rek != -1:
-                        st.success(f"✅ Ditemukan di index: **{idx_rek}**")
-                    else:
-                        st.error("❌ Tidak ditemukan")
-                    
-                    st.metric("Waktu Eksekusi", f"{time_rek:.4f} ms")
-                    st.metric("Jumlah Perbandingan", comp_rek)
-                except RecursionError:
-                    st.error("⚠️ Stack Overflow! Data terlalu besar untuk rekursif")
-                    time_rek = None
+                idx_rek, comp_rek = func(products, keyword)
+                time_rek = (time.perf_counter() - start) * 1000
+                
+                st.metric("Waktu", f"{time_rek:.4f} ms")
+                st.metric("Perbandingan", f"{comp_rek:,}")
+                st.metric("Ops/detik", f"{num_products/(time_rek/1000):,.0f}")
             
-            # Perbandingan performa
-            if 'time_rek' in locals() and time_rek is not None:
-                st.markdown("---")
-                col_comp1, col_comp2, col_comp3 = st.columns(3)
-                
-                with col_comp1:
-                    diff_time = abs(time_iter - time_rek)
-                    st.metric("Selisih Waktu", f"{diff_time:.4f} ms")
-                
-                with col_comp2:
-                    faster = "Iteratif" if time_iter < time_rek else "Rekursif"
-                    st.metric("Lebih Cepat", faster)
-                
-                with col_comp3:
-                    if time_iter > 0 and time_rek > 0:
-                        speedup = max(time_rek, time_iter) / min(time_rek, time_iter)
-                        st.metric("Speedup", f"{speedup:.2f}x")
+            # Calculate metrics
+            metrics = calculate_efficiency_columns(time_iter, time_rek, comp_iter, comp_rek, num_products)
             
-            # ===== PENJELASAN OPERASI DASAR =====
+            # Display metrics in columns
             st.markdown("---")
-            st.header("⚡ Analisis Operasi Dasar")
+            st.subheader("📊 Performance Metrics")
             
-            col_expl1, col_expl2 = st.columns(2)
+            metric_cols = st.columns(4)
+            with metric_cols[0]:
+                st.metric("Speedup", f"{metrics['Speedup']:.2f}x")
+            with metric_cols[1]:
+                st.metric("Skor Total", f"{metrics['Total']:.1f}/100")
+            with metric_cols[2]:
+                st.metric("Skor Kecepatan", f"{metrics['Kecepatan']:.1f}")
+            with metric_cols[3]:
+                st.metric("Skor Memori", f"{metrics['Memori']:.1f}")
+        
+        # ===== MULTI-SIZE ANALYSIS =====
+        if test_sizes:
+            st.markdown("---")
+            st.header("📈 Multi-Size Performance Analysis")
             
-            with col_expl1:
-                st.markdown("### 🎯 Operasi Dasar: PERBANDINGAN")
-                st.code("""
-# Linear Search Iteratif
-for i in range(len(products)):
-    comparisons += 1          # ⭐ OPERASI DASAR
-    if keyword in products[i]:
-        return i              # Found
-    
-# Linear Search Rekursif
-if index >= len(products):
-    return -1                 # Not found
-    
-comparisons += 1              # ⭐ OPERASI DASAR
-if keyword in products[index]:
-    return index              # Found
-                """, language="python")
-            
-            with col_expl2:
-                st.markdown("### 📊 Analisis Kompleksitas")
+            if st.button("🚀 Jalankan Analisis Multi-Size", type="primary", use_container_width=True):
+                with st.spinner("Menjalankan analisis multi-size..."):
+                    df_results = run_performance_test_with_columns(
+                        sorted(test_sizes), 
+                        keyword, 
+                        consistent=True
+                    )
+                    
+                    df_metrics = calculate_all_metrics(df_results)
                 
-                cases_data = {
-                    'Kasus': ['Best Case', 'Average Case', 'Worst Case'],
-                    'Perbandingan': [1, f"n/2 = {num_products//2}", f"n = {num_products}"],
-                    'Big O': ['O(1)', 'O(n)', 'O(n)'],
-                    'Deskripsi': [
-                        'Keyword ditemukan di elemen pertama',
-                        'Keyword ditemukan di tengah array',
-                        'Keyword tidak ada atau di elemen terakhir'
-                    ]
+                # Display summary stats
+                st.markdown("### 📊 Summary Statistics")
+                
+                summary_cols = st.columns(4)
+                with summary_cols[0]:
+                    st.metric("Rata-rata Speedup", f"{df_metrics['Speedup'].mean():.2f}x")
+                with summary_cols[1]:
+                    st.metric("Skor Efisiensi Rata", f"{df_metrics['Skor Total'].mean():.1f}")
+                with summary_cols[2]:
+                    st.metric("Max Size Tested", f"{df_metrics['Ukuran Data'].max():,}")
+                with summary_cols[3]:
+                    st.metric("Total Tests", len(df_metrics))
+                
+                # Display selected charts
+                if "⏱️ Perbandingan Waktu" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("⏱️ Perbandingan Waktu Eksekusi")
+                    time_fig = create_time_comparison_column_chart(df_metrics)
+                    st.plotly_chart(time_fig, use_container_width=True)
+                
+                if "🔢 Jumlah Operasi" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("🔢 Jumlah Operasi Perbandingan")
+                    ops_fig = create_operations_column_chart(df_metrics)
+                    st.plotly_chart(ops_fig, use_container_width=True)
+                
+                if "🏆 Skor Efisiensi" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("🏆 Skor Efisiensi Multi-Dimensi")
+                    score_fig = create_efficiency_score_column_chart(df_metrics)
+                    st.plotly_chart(score_fig, use_container_width=True)
+                
+                if "⚡ Throughput" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("⚡ Throughput (Operasi per Detik)")
+                    throughput_fig = create_throughput_column_chart(df_metrics)
+                    st.plotly_chart(throughput_fig, use_container_width=True)
+                
+                if "📈 Speedup" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("📈 Speedup Analysis")
+                    speedup_fig = create_speedup_column_chart(df_metrics)
+                    st.plotly_chart(speedup_fig, use_container_width=True)
+                
+                if "🔍 Comparison Matrix" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("🔍 Comparison Matrix: 4 Metrik Utama")
+                    matrix_fig = create_comparison_matrix(df_metrics)
+                    st.plotly_chart(matrix_fig, use_container_width=True)
+                
+                # TREN PERFORMANCE - SATU-SATUNYA LINE CHART
+                st.markdown("---")
+                st.subheader("📊 Tren Performa vs Ukuran Dataset")
+                st.info("⚠️ **INI SATU-SATUNYA LINE CHART** - Menunjukkan trend performa")
+                trend_fig = create_performance_trend_chart(df_metrics)
+                st.plotly_chart(trend_fig, use_container_width=True)
+                
+                # Detailed metrics table
+                st.markdown("---")
+                st.subheader("📋 Detailed Metrics Table")
+                
+                # Format table for display
+                display_df = df_metrics.copy()
+                display_df['Ukuran Data'] = display_df['Ukuran Data'].apply(lambda x: f"{x:,}")
+                
+                format_config = {
+                    'Waktu Iteratif (ms)': '{:.4f}',
+                    'Waktu Rekursif (ms)': '{:.4f}',
+                    'Speedup': '{:.2f}x',
+                    'Ops/detik Iteratif': '{:,.0f}',
+                    'Ops/detik Rekursif': '{:,.0f}',
+                    'Skor Total': '{:.1f}',
+                    'Skor Kecepatan': '{:.1f}',
+                    'Skor Memori': '{:.1f}',
+                    'Skor Stabilitas': '{:.1f}',
+                    'Skor Kesederhanaan': '{:.1f}'
                 }
                 
-                df_cases = pd.DataFrame(cases_data)
-                st.dataframe(df_cases, use_container_width=True, hide_index=True)
+                for col, fmt in format_config.items():
+                    if col in display_df.columns:
+                        display_df[col] = display_df[col].apply(lambda x: fmt.format(x))
+                
+                st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    height=400
+                )
+                
+                # Insights
+                st.markdown("---")
+                st.subheader("🔍 Insights & Recommendations")
+                
+                insight_cols = st.columns(3)
+                
+                with insight_cols[0]:
+                    best_speedup = df_metrics['Speedup'].max()
+                    best_size = df_metrics.loc[df_metrics['Speedup'].idxmax(), 'Ukuran Data']
+                    st.success(f"**Best Speedup**\n\n{best_speedup:.2f}x\nat {best_size:,} products")
+                
+                with insight_cols[1]:
+                    best_score = df_metrics['Skor Total'].max()
+                    best_score_size = df_metrics.loc[df_metrics['Skor Total'].idxmax(), 'Ukuran Data']
+                    st.info(f"**Best Efficiency**\n\nScore: {best_score:.1f}\nat {best_score_size:,} products")
+                
+                with insight_cols[2]:
+                    avg_ops = df_metrics['Ops/detik Iteratif'].mean()
+                    st.warning(f"**Avg Throughput**\n\n{avg_ops:,.0f} ops/sec\nIteratif lebih konsisten")
         
-        # ===== BAGIAN 2: PERFORMANCE TESTING (OTOMATIS) =====
-        if demo_run and test_sizes:
-            st.markdown("---")
-            st.header("📊 Performance Testing (Auto-run)")
-            
-            # Jalankan performance test otomatis
-            with st.spinner(f"Menjalankan performance test pada {len(test_sizes)} ukuran dataset..."):
-                df_results = run_performance_test(sorted(test_sizes), keyword, use_consistent_data)
-            
-            # Tampilkan info
-            st.success(f"✅ Performance test selesai! Menguji {len(test_sizes)} ukuran dataset")
-            
-            # Tampilkan grafik performa
-            fig_perf = create_performance_chart(df_results)
-            st.plotly_chart(fig_perf, use_container_width=True)
-            
-            # Tampilkan insights
-            st.markdown("### 🔍 Insights dari Hasil Testing:")
-            
-            insights_col1, insights_col2 = st.columns(2)
-            
-            with insights_col1:
-                # Analisis iteratif
-                if len(df_results) > 1:
-                    first_time = df_results.iloc[0]['Iteratif Worst (ms)']
-                    last_time = df_results.iloc[-1]['Iteratif Worst (ms)']
-                    growth_factor = last_time / first_time if first_time > 0 else 0
-                    
-                    st.metric(
-                        "Pertumbuhan Waktu (Iteratif)",
-                        f"{growth_factor:.1f}x",
-                        help=f"Dari {df_results.iloc[0]['Ukuran Data']} ke {df_results.iloc[-1]['Ukuran Data']} produk"
-                    )
-            
-            with insights_col2:
-                # Analisis rekursif
-                rek_times = df_results['Rekursif Worst (ms)'].dropna()
-                if len(rek_times) > 1:
-                    st.metric(
-                        "Rekursif Berhasil",
-                        f"{len(rek_times)}/{len(df_results)} ukuran",
-                        help="Jumlah ukuran data yang berhasil diuji dengan rekursif"
-                    )
-            
-            # Tampilkan tabel data
-            with st.expander("📋 Data Lengkap Hasil Testing"):
-                st.dataframe(df_results, use_container_width=True)
-        
-        # ===== BAGIAN 3: ANALISIS ASIMTOTIK =====
+        # ===== PENJELASAN VISUALISASI =====
         st.markdown("---")
-        st.header("📈 Analisis Kompleksitas Asimtotik")
+        st.header("📚 Column vs Line Visualization")
         
-        # Penjelasan
-        st.markdown("""
-        ### 🎯 Apa itu Analisis Asimtotik?
-        
-        Analisis asimtotik digunakan untuk menganalisis **perilaku waktu eksekusi algoritma** 
-        ketika ukuran input bertambah sangat besar (n → ∞). **Notasi Big O** menggambarkan 
-        **batas atas (upper bound)** dari pertumbuhan fungsi waktu.
-        
-        **⚡ Operasi Dasar Linear Search:**
-        - `comparisons += 1` (perbandingan)
-        - Dilakukan 1 sampai n kali
-        - Menentukan kompleksitas O(n)
-        """)
-        
-        # Tampilkan visualisasi yang dipilih
-        if show_viz:
-            viz_cols = st.columns(2)
+        with st.expander("🎯 Mengapa Column Charts Dominan?", expanded=True):
+            col_exp1, col_exp2 = st.columns(2)
             
-            if "📈 Grafik Asimtotik" in show_viz:
-                with viz_cols[0]:
-                    fig_asymptotic = create_asymptotic_comparison_chart()
-                    st.plotly_chart(fig_asymptotic, use_container_width=True)
+            with col_exp1:
+                st.markdown("""
+                **✅ Keunggulan Column Charts:**
+                
+                1. **Direct Comparison** - Mudah bandingkan nilai
+                2. **Discrete Data** - Ukuran dataset diskrit
+                3. **Exact Values** - Tinggi bar = nilai pasti
+                4. **Grouping** - Bisa grup multiple series
+                5. **Visual Impact** - Lebih eye-catching
+                
+                **🎯 Cocok untuk:**
+                - Perbandingan 2+ algoritma
+                - Data kategori/diskrit
+                - Nilai absolut
+                - Side-by-side comparison
+                """)
             
-            if "🔍 Kompleksitas Linear" in show_viz:
-                with viz_cols[1]:
-                    fig_linear_comp = create_linear_search_complexity_chart()
-                    st.plotly_chart(fig_linear_comp, use_container_width=True)
+            with col_exp2:
+                st.markdown("""
+                **📈 Kapan Pakai Line Chart?**
+                
+                1. **Trend Analysis** - Pola perubahan
+                2. **Continuous Data** - Data berkelanjutan
+                3. **Time Series** - Perubahan waktu
+                4. **Regression** - Garis tren
+                5. **Prediction** - Ekstrapolasi
+                
+                **⚠️ HANYA untuk Tren:**
+                - Speedup trend
+                - Score trend
+                - Performance pattern
+                - Growth analysis
+                """)
             
-            if "📋 Tabel Kompleksitas" in show_viz:
-                st.markdown("### 📋 Tabel Perbandingan Nilai Kompleksitas")
-                df_complexity = create_complexity_table()
-                st.dataframe(df_complexity, use_container_width=True)
-        
-        # ===== BAGIAN 4: KESIMPULAN =====
-        st.markdown("---")
-        st.header("🎯 Kesimpulan & Rekomendasi")
-        
-        col_concl1, col_concl2 = st.columns(2)
-        
-        with col_concl1:
-            st.success("""
-            **✅ Keunggulan Linear Search:**
+            st.markdown("""
+            **🎨 Design Principle:**  
+            > "Use column charts for comparison, line charts for trends"
             
-            1. **Sederhana** - mudah diimplementasi
-            2. **Universal** - bekerja pada data terurut/tidak terurut
-            3. **Operasi Dasar** - hanya perbandingan
-            4. **Predictable** - O(1) sampai O(n)
-            5. **Stable** - tidak mengubah data asli
+            **📊 Dashboard ini mengikuti prinsip:**
+            1. **6 Column Charts** untuk perbandingan
+            2. **1 Line Chart** untuk tren performa
+            3. **Konsisten** dalam visualisasi
+            4. **Intuitif** untuk interpretasi
             """)
-        
-        with col_concl2:
-            st.warning("""
-            **⚠️ Kelemahan Linear Search:**
-            
-            1. **Slow for large n** - O(n) time complexity
-            2. **Inefficient** - harus cek semua elemen di worst case
-            3. **Operasi Berulang** - n kali perbandingan
-            4. **Not scalable** - tidak cocok untuk big data
-            5. **Linear Growth** - waktu tumbuh proporsional dengan n
-            """)
-        
-        # Rekomendasi penggunaan
-        st.markdown("### 💡 Rekomendasi Penggunaan")
-        
-        rec_data = {
-            'Use Case': ['Data Kecil (<1000)', 'Data Sedang (1000-10000)', 'Data Besar (>10000)', 
-                         'Data Terurut', 'Pencarian Berulang'],
-            'Algoritma': ['Linear Search', 'Binary Search / Hash Table', 'Hash Table / Indexing',
-                         'Binary Search', 'Hash Table'],
-            'Operasi Dasar': ['Perbandingan', 'Perbandingan / Hash', 'Hash',
-                            'Perbandingan', 'Hash'],
-            'Kompleksitas': ['O(n)', 'O(log n) / O(1)', 'O(1)',
-                            'O(log n)', 'O(1)']
-        }
-        
-        df_recommendation = pd.DataFrame(rec_data)
-        st.dataframe(df_recommendation, use_container_width=True, hide_index=True)
-        
-        # Final message
-        st.info("""
-        **🎓 Takeaway:**
-        Linear Search adalah **algoritma fundamental** dengan operasi dasar **perbandingan**.
-        
-        **📊 Performance Testing** menunjukkan:
-        - Waktu eksekusi tumbuh linear dengan ukuran data
-        - Iteratif lebih stabil untuk data besar
-        - Rekursif berisiko stack overflow
-        
-        **Pahami operasi dasarnya, pilih algoritma sesuai kebutuhan!**
-        """)
 
 if __name__ == "__main__":
     main()
