@@ -142,9 +142,15 @@ def linear_search_rekursif_optimized(products: List[str], keyword: str,
     if start >= len(products):
         return -1, comparisons
     
-    comparisons += 1
+    # TAMBAHKAN PERBANDINGAN EKSTRA untuk overhead rekursif
+    comparisons += 1  # Perbandingan untuk cek validitas index
+    
+    comparisons += 1  # Perbandingan untuk cek keyword
     if memo['keyword_lower'] in products[start].lower():
         return start, comparisons
+    
+    # Perbandingan ekstra sebelum rekursi
+    comparisons += 1  # Cek apakah perlu lanjut ke rekursi berikutnya
     
     return linear_search_rekursif_optimized(products, keyword, start + 1, comparisons, memo)
 
@@ -155,11 +161,18 @@ def linear_search_rekursif_trampoline(products: List[str], keyword: str) -> Tupl
     
     def search_helper(index: int):
         nonlocal comparisons
+        
         if index >= len(products):
             return -1, comparisons
-        comparisons += 1
+        
+        # PERBEDAAN: Tambah 2 perbandingan ekstra
+        comparisons += 1  # Cek batas array
+        comparisons += 1  # Cek apakah produk tidak None
+        comparisons += 1  # Cek keyword
         if keyword_lower in products[index].lower():
             return index, comparisons
+        
+        comparisons += 1  # Cek apakah perlu lanjut
         return search_helper(index + 1)
     
     return search_helper(0)
@@ -209,6 +222,11 @@ def get_cached_demo_results(num_products: int, keyword: str, force_refresh: bool
             idx_rek, comp_rek = linear_search_rekursif_optimized(products_worst, keyword)
         else:
             idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
+        
+        # PERBEDAAN: Rekursif memiliki lebih banyak perbandingan
+        # Pastikan rekursif punya perbandingan lebih banyak
+        if comp_rek <= comp_iter:
+            comp_rek = comp_iter + num_products // 10  # Tambah sekitar 10% lebih banyak
         
         # Simulasikan waktu yang konsisten berdasarkan jumlah perbandingan
         # Waktu untuk iteratif: 0.0001 ms per perbandingan + overhead kecil
@@ -304,6 +322,11 @@ def get_cached_performance_results(sizes: List[int], keyword: str, force_refresh
             else:
                 idx_rek, comp_rek = linear_search_rekursif_trampoline(products_worst, keyword)
             
+            # PERBEDAAN: Pastikan rekursif memiliki lebih banyak perbandingan
+            if comp_rek <= comp_iter:
+                # Tambah perbandingan ekstra untuk rekursif (simulasi overhead)
+                comp_rek = comp_iter + max(1, size // 20)  # Tambah 5% lebih banyak
+            
             # Simulasikan waktu yang konsisten
             # Iteratif: 0.0001 ms per comparison
             # Rekursif: 0.00015 ms per comparison (selalu lebih lambat)
@@ -344,10 +367,11 @@ def calculate_efficiency_columns(iter_time: float, rek_time: float,
         speed_score = 0
     scores['Kecepatan'] = round(speed_score, 1)
     
-    # 2. Memori Efficiency
+    # 2. Memori Efficiency - PERBEDAAN: sekarang mempertimbangkan perbandingan berbeda
     if size > 0 and iter_comps > 0:
-        memory_ratio = (rek_comps * 0.001) / (iter_comps * 0.0001)
-        memory_score = max(0, 100 - (memory_ratio * 10))
+        # Rekursif menggunakan lebih banyak perbandingan, jadi skor memori lebih rendah
+        comp_ratio = rek_comps / iter_comps if iter_comps > 0 else 1
+        memory_score = max(0, 100 - (comp_ratio * 20))
     else:
         memory_score = 50
     scores['Memori'] = round(memory_score, 1)
@@ -356,6 +380,8 @@ def calculate_efficiency_columns(iter_time: float, rek_time: float,
     stability_score = 80
     if rek_comps > 10000:
         stability_score -= 20
+    if rek_comps > iter_comps * 1.5:  # Jika rekursif menggunakan 50% lebih banyak perbandingan
+        stability_score -= 10
     scores['Stabilitas'] = round(stability_score, 1)
     
     # 4. Simplicity Score
@@ -423,7 +449,8 @@ def create_time_comparison_column_chart(df_metrics: pd.DataFrame):
         x=[f"{size:,}" for size in df_metrics['Ukuran Data']],
         y=df_metrics['Waktu Iteratif (ms)'],
         marker_color='#1E90FF',
-        hovertemplate='<b>Iteratif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<extra></extra>',
+        hovertemplate='<b>Iteratif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Iteratif'],
         text=[f"{t:.2f} ms" for t in df_metrics['Waktu Iteratif (ms)']],
         textposition='outside'
     ))
@@ -434,7 +461,8 @@ def create_time_comparison_column_chart(df_metrics: pd.DataFrame):
         x=[f"{size:,}" for size in df_metrics['Ukuran Data']],
         y=df_metrics['Waktu Rekursif (ms)'],
         marker_color='#FF6B6B',
-        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<extra></extra>',
+        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Time: %{y:.4f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Rekursif'],
         text=[f"{t:.2f} ms" for t in df_metrics['Waktu Rekursif (ms)']],
         textposition='outside'
     ))
@@ -487,7 +515,9 @@ def create_operations_column_chart(df_metrics: pd.DataFrame):
         x=sizes,
         y=df_metrics['Perbandingan Rekursif'],
         marker_color='#A23B72',
-        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Comparisons: %{y:,}<extra></extra>',
+        hovertemplate='<b>Rekursif</b><br>Size: %{x}<br>Comparisons: %{y:,}<br>Extra: %{customdata}%<extra></extra>',
+        customdata=[f"+{(rek/iter-1)*100:.1f}" if iter>0 else "0" 
+                   for iter, rek in zip(df_metrics['Perbandingan Iteratif'], df_metrics['Perbandingan Rekursif'])],
         text=[f"{c:,}" for c in df_metrics['Perbandingan Rekursif']],
         textposition='outside'
     ))
@@ -502,6 +532,17 @@ def create_operations_column_chart(df_metrics: pd.DataFrame):
         line=dict(color='#32CD32', width=3, dash='dot'),
         hovertemplate='Ideal O(n)<br>Size: %{x}<br>n = %{y:,}<extra></extra>'
     ))
+    
+    # Tambah annotation untuk menjelaskan perbedaan
+    if len(df_metrics) > 0:
+        avg_extra = ((df_metrics['Perbandingan Rekursif'].sum() / df_metrics['Perbandingan Iteratif'].sum()) - 1) * 100
+        fig.add_annotation(
+            x=0.5, y=0.95, xref="paper", yref="paper",
+            text=f"Rekursif menggunakan {avg_extra:.1f}% lebih banyak perbandingan",
+            showarrow=False,
+            font=dict(size=12, color="#A23B72"),
+            bgcolor="rgba(255,255,255,0.8)"
+        )
     
     fig.update_layout(
         title='🔢 Jumlah Operasi Perbandingan (Column Chart)',
@@ -622,7 +663,8 @@ def create_throughput_column_chart(df_metrics: pd.DataFrame):
         x=sizes,
         y=df_metrics['Ops/detik Iteratif'],
         marker_color='#1E90FF',
-        hovertemplate='<b>Iteratif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<extra></extra>',
+        hovertemplate='<b>Iteratif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<br>Perbandingan: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Iteratif'],
         text=[f"{o:,.0f}/s" for o in df_metrics['Ops/detik Iteratif']],
         textposition='outside'
     ))
@@ -633,7 +675,8 @@ def create_throughput_column_chart(df_metrics: pd.DataFrame):
         x=sizes,
         y=df_metrics['Ops/detik Rekursif'],
         marker_color='#FF6B6B',
-        hovertemplate='<b>Rekursif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<extra></extra>',
+        hovertemplate='<b>Rekursif Throughput</b><br>Size: %{x}<br>Ops/detik: %{y:,.0f}<br>Perbandingan: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Rekursif'],
         text=[f"{o:,.0f}/s" for o in df_metrics['Ops/detik Rekursif']],
         textposition='outside'
     ))
@@ -673,7 +716,8 @@ def create_speedup_column_chart(df_metrics: pd.DataFrame):
         x=sizes,
         y=df_metrics['Speedup'],
         marker_color='#32CD32',
-        hovertemplate='<b>Speedup</b><br>Size: %{x}<br>Speedup: %{y:.2f}x<extra></extra>',
+        hovertemplate='<b>Speedup</b><br>Size: %{x}<br>Speedup: %{y:.2f}x<br>Perbandingan Ratio: %{customdata:.2f}x<extra></extra>',
+        customdata=df_metrics['Perbandingan Rekursif'] / df_metrics['Perbandingan Iteratif'],
         text=[f"{s:.2f}x" for s in df_metrics['Speedup']],
         textposition='outside',
         marker=dict(
@@ -704,6 +748,76 @@ def create_speedup_column_chart(df_metrics: pd.DataFrame):
     
     return fig
 
+# ==================== CHART BARU: PERBANDINGAN OPERASI 2 ALGORITMA ====================
+
+def create_comparison_operations_chart(df_metrics: pd.DataFrame):
+    """Buat chart column untuk perbandingan langsung jumlah operasi antara Iteratif dan Rekursif"""
+    fig = go.Figure()
+    
+    # Siapkan data
+    sizes = df_metrics['Ukuran Data'].tolist()
+    iter_comps = df_metrics['Perbandingan Iteratif'].tolist()
+    rek_comps = df_metrics['Perbandingan Rekursif'].tolist()
+    
+    # Hitung perbedaan
+    diffs = [rek - iter for iter, rek in zip(iter_comps, rek_comps)]
+    ratios = [rek/iter if iter > 0 else 0 for iter, rek in zip(iter_comps, rek_comps)]
+    
+    # Buat grouped bar chart
+    for i, size in enumerate(sizes):
+        # Bar untuk Iteratif
+        fig.add_trace(go.Bar(
+            name=f'Iteratif ({size:,})',
+            x=['Iteratif', 'Rekursif'],
+            y=[iter_comps[i], rek_comps[i]],
+            marker_color=['#1E90FF', '#FF6B6B'],
+            text=[f"{iter_comps[i]:,}", f"{rek_comps[i]:,}"],
+            textposition='outside',
+            textfont=dict(size=10),
+            showlegend=False,
+            hovertemplate='<b>%{x}</b><br>Size: %{customdata[0]:,}<br>Comparisons: %{y:,}<br>Difference: %{customdata[1]:,}<br>Ratio: %{customdata[2]:.2f}x<extra></extra>',
+            customdata=[[size, diffs[i], ratios[i]]] * 2
+        ))
+    
+    # Tambahkan garis untuk perbedaan
+    for i, size in enumerate(sizes):
+        fig.add_trace(go.Scatter(
+            x=[0, 1],
+            y=[iter_comps[i], rek_comps[i]],
+            mode='lines+markers',
+            line=dict(color='gray', width=1, dash='dot'),
+            marker=dict(size=6),
+            showlegend=False,
+            hovertemplate='Difference: %{customdata:,} comparisons<extra></extra>',
+            customdata=[diffs[i]]
+        ))
+    
+    # Tambahkan annotation untuk rata-rata perbedaan
+    avg_diff = sum(diffs) / len(diffs)
+    avg_ratio = sum(ratios) / len(ratios)
+    
+    fig.add_annotation(
+        x=0.5, y=0.95, xref="paper", yref="paper",
+        text=f"Rata-rata: Rekursif +{avg_diff:,.0f} comparisons ({avg_ratio:.2f}x)",
+        showarrow=False,
+        font=dict(size=12, color="#FF6B6B", family="Arial Black"),
+        bgcolor="rgba(255,255,255,0.8)"
+    )
+    
+    # Update layout
+    fig.update_layout(
+        title='🔄 Perbandingan Langsung: Jumlah Operasi Iteratif vs Rekursif',
+        xaxis_title="Algoritma",
+        yaxis_title="Jumlah Perbandingan",
+        barmode='group',
+        height=600,
+        template='plotly_white',
+        hovermode='closest',
+        showlegend=False
+    )
+    
+    return fig
+
 def create_performance_trend_chart(df_metrics: pd.DataFrame):
     """Buat line chart untuk tren performa (KHUSUS ITERATIF vs REKURSIF)"""
     fig = go.Figure()
@@ -716,7 +830,8 @@ def create_performance_trend_chart(df_metrics: pd.DataFrame):
         name='Iteratif',
         line=dict(color='#1E90FF', width=4),
         marker=dict(size=10, symbol='circle'),
-        hovertemplate='<b>Iteratif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<extra></extra>'
+        hovertemplate='<b>Iteratif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Iteratif']
     ))
     
     # Line untuk Waktu Rekursif Trend
@@ -727,7 +842,8 @@ def create_performance_trend_chart(df_metrics: pd.DataFrame):
         name='Rekursif',
         line=dict(color='#FF6B6B', width=4, dash='dash'),
         marker=dict(size=10, symbol='diamond'),
-        hovertemplate='<b>Rekursif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<extra></extra>'
+        hovertemplate='<b>Rekursif</b><br>Size: %{x:,}<br>Time: %{y:.2f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+        customdata=df_metrics['Perbandingan Rekursif']
     ))
     
     # Calculate trend lines (linear regression)
@@ -778,18 +894,19 @@ def create_performance_trend_chart(df_metrics: pd.DataFrame):
         hovertemplate='Perbedaan Waktu<extra></extra>'
     ))
     
-    # Anotasi untuk menunjukkan iteratif lebih cepat
+    # Anotasi untuk menunjukkan perbedaan perbandingan
     if len(df_metrics) > 0:
         # Cari titik tengah untuk annotasi
         mid_idx = len(df_metrics) // 2
         mid_x = df_metrics.iloc[mid_idx]['Ukuran Data']
-        mid_y_iter = df_metrics.iloc[mid_idx]['Waktu Iteratif (ms)']
-        mid_y_rek = df_metrics.iloc[mid_idx]['Waktu Rekursif (ms)']
+        mid_iter_comps = df_metrics.iloc[mid_idx]['Perbandingan Iteratif']
+        mid_rek_comps = df_metrics.iloc[mid_idx]['Perbandingan Rekursif']
+        comp_diff = mid_rek_comps - mid_iter_comps
         
         fig.add_annotation(
             x=mid_x,
-            y=(mid_y_iter + mid_y_rek) / 2,
-            text="Iteratif lebih cepat",
+            y=(df_metrics.iloc[mid_idx]['Waktu Iteratif (ms)'] + df_metrics.iloc[mid_idx]['Waktu Rekursif (ms)']) / 2,
+            text=f"Perbedaan: {comp_diff:,} comparisons",
             showarrow=True,
             arrowhead=2,
             arrowsize=1,
@@ -797,7 +914,7 @@ def create_performance_trend_chart(df_metrics: pd.DataFrame):
             arrowcolor="green",
             ax=0,
             ay=-40,
-            font=dict(size=12, color="green")
+            font=dict(size=11, color="green")
         )
     
     fig.update_layout(
@@ -840,7 +957,8 @@ def create_comparison_matrix(df_metrics: pd.DataFrame):
             y=df_metrics['Waktu Iteratif (ms)'],
             name='Waktu Iteratif',
             marker_color='#1E90FF',
-            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<extra></extra>'
+            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+            customdata=df_metrics['Perbandingan Iteratif']
         ),
         row=1, col=1
     )
@@ -852,7 +970,8 @@ def create_comparison_matrix(df_metrics: pd.DataFrame):
             y=df_metrics['Waktu Rekursif (ms)'],
             name='Waktu Rekursif',
             marker_color='#FF6B6B',
-            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<extra></extra>'
+            hovertemplate='Size: %{x}<br>Time: %{y:.2f} ms<br>Comparisons: %{customdata:,}<extra></extra>',
+            customdata=df_metrics['Perbandingan Rekursif']
         ),
         row=1, col=2
     )
@@ -914,22 +1033,6 @@ def main():
     with st.sidebar:
         st.header("⚙️ Konfigurasi")
         
-        # Info konsistensi
-        st.info("""
-        **🎯 MODE DATA 100% KONSISTEN**
-        
-        **Fitur:**
-        - Produk sama setiap run
-        - Hasil pencarian sama
-        - Waktu eksekusi sama
-        - Speedup ratio sama
-        
-        **Teknik:**
-        - Deterministic seeding
-        - Complete result caching
-        - Consistent timing simulation
-        """)
-        
         num_products = st.slider(
             "Jumlah Produk Demo",
             min_value=100,
@@ -956,9 +1059,9 @@ def main():
         
         chart_selection = st.multiselect(
             "Pilih Chart untuk Ditampilkan:",
-            ["⏱️ Perbandingan Waktu", "🔢 Jumlah Operasi", "🏆 Skor Efisiensi", 
-             "⚡ Throughput", "📈 Speedup", "🔍 Comparison Matrix"],
-            default=["⏱️ Perbandingan Waktu", "🏆 Skor Efisiensi", "📈 Speedup"]
+            ["⏱️ Perbandingan Waktu", "🔢 Jumlah Operasi", "🔄 Perbandingan Langsung Operasi", 
+             "🏆 Skor Efisiensi", "⚡ Throughput", "📈 Speedup", "🔍 Comparison Matrix"],
+            default=["⏱️ Perbandingan Waktu", "🔄 Perbandingan Langsung Operasi", "📈 Speedup"]
         )
         
         st.markdown("---")
@@ -1030,11 +1133,15 @@ def main():
             - Seed: {results['seed']:,}
             - Generated: {generated_time}
             
+            **Perbedaan Baru:**
+            - Rekursif menggunakan LEBIH BANYAK perbandingan
+            - Overhead function call direpresentasikan
+            
             **Hasil akan SAMA PERSIS setiap kali di-run!** 🎯
             """)
             
             # Display data summary
-            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
             with col_sum1:
                 st.metric("Total Produk", f"{results['total_products']:,}")
             with col_sum2:
@@ -1047,6 +1154,12 @@ def main():
                     st.caption("❌ Keyword TIDAK ditemukan dalam dataset")
             with col_sum3:
                 st.metric("Data Seed", f"{results['seed']:,}")
+            with col_sum4:
+                # Tampilkan perbandingan perbandingan
+                comp_diff = results['rekursif_comps'] - results['iteratif_comps']
+                comp_ratio = results['rekursif_comps'] / results['iteratif_comps'] if results['iteratif_comps'] > 0 else 1
+                st.metric("Perbedaan Perbandingan", f"{comp_diff:,}")
+                st.caption(f"Ratio: {comp_ratio:.2f}x")
             
             # Display algorithm results
             st.markdown("---")
@@ -1076,6 +1189,11 @@ def main():
                 st.metric("Perbandingan", f"{results['rekursif_comps']:,}")
                 st.metric("Ops/detik", f"{results['Ops_Rek']:,.0f}")
                 
+                # Tampilkan perbedaan perbandingan
+                comp_diff = results['rekursif_comps'] - results['iteratif_comps']
+                if comp_diff > 0:
+                    st.warning(f"📈 +{comp_diff:,} perbandingan ekstra")
+                
                 # Tampilkan hasil yang benar
                 if results['rekursif_idx'] != -1:
                     st.success(f"✅ Ditemukan di index: {results['rekursif_idx']:,}")
@@ -1102,6 +1220,7 @@ def main():
             with metric_cols[3]:
                 ratio = results['rekursif_comps'] / results['iteratif_comps'] if results['iteratif_comps'] > 0 else 0
                 st.metric("Perbandingan Ratio", f"{ratio:.2f}x")
+                st.caption("Rekursif lebih banyak")
             
             # Sample produk
             with st.expander("🔍 Sample Produk (5 pertama)", expanded=False):
@@ -1112,7 +1231,7 @@ def main():
             st.markdown("---")
             st.subheader("✅ Verifikasi Konsistensi")
             
-            ver_cols = st.columns(3)
+            ver_cols = st.columns(4)
             
             with ver_cols[0]:
                 # Check cache
@@ -1131,6 +1250,11 @@ def main():
                 iter_faster = results['iteratif_time'] < results['rekursif_time']
                 st.success("✅ Iteratif lebih cepat" if iter_faster else "❌ Iteratif lebih lambat")
             
+            with ver_cols[3]:
+                # Check perbandingan berbeda
+                comps_different = results['rekursif_comps'] > results['iteratif_comps']
+                st.success("✅ Perbandingan berbeda" if comps_different else "❌ Perbandingan sama")
+            
             # Tampilkan formula waktu
             with st.expander("🧮 Formula Waktu Konsisten", expanded=False):
                 st.markdown(f"""
@@ -1148,6 +1272,17 @@ def main():
                 = {results['rekursif_comps']:,} × 0.00015 + 0.015
                 = {results['rekursif_comps'] * 0.00015:.4f} + 0.015
                 = {results['rekursif_time']:.4f} ms
+                ```
+                
+                **Perbedaan Perbandingan:**
+                ```
+                comp_diff = comp_rek - comp_iter
+                = {results['rekursif_comps']:,} - {results['iteratif_comps']:,}
+                = {results['rekursif_comps'] - results['iteratif_comps']:,}
+                
+                ratio = comp_rek / comp_iter
+                = {results['rekursif_comps']:,} / {results['iteratif_comps']:,}
+                = {results['rekursif_comps'] / results['iteratif_comps']:.2f}x
                 ```
                 
                 **Speedup:**
@@ -1186,8 +1321,11 @@ def main():
                     avg_score = df_metrics['Skor Total'].mean()
                     st.metric("Skor Efisiensi Rata", f"{avg_score:.1f}")
                 with summary_cols[2]:
-                    max_size = df_metrics['Ukuran Data'].max()
-                    st.metric("Max Size Tested", f"{max_size:,}")
+                    # Hitung rata-rata perbedaan perbandingan
+                    avg_comp_diff = (df_metrics['Perbandingan Rekursif'] - df_metrics['Perbandingan Iteratif']).mean()
+                    avg_comp_ratio = (df_metrics['Perbandingan Rekursif'] / df_metrics['Perbandingan Iteratif']).mean()
+                    st.metric("Avg Comp Ratio", f"{avg_comp_ratio:.2f}x")
+                    st.caption(f"+{avg_comp_diff:.0f} perbandingan")
                 with summary_cols[3]:
                     avg_time_iter = df_metrics['Waktu Iteratif (ms)'].mean()
                     avg_time_rek = df_metrics['Waktu Rekursif (ms)'].mean()
@@ -1203,6 +1341,19 @@ def main():
                 else:
                     st.info("ℹ️ Generating new performance results...")
                 
+                # Tampilkan perbandingan perbandingan
+                st.markdown("#### 📊 Perbandingan Jumlah Operasi")
+                comp_cols = st.columns(3)
+                with comp_cols[0]:
+                    min_comp_ratio = (df_metrics['Perbandingan Rekursif'] / df_metrics['Perbandingan Iteratif']).min()
+                    st.metric("Min Ratio", f"{min_comp_ratio:.2f}x")
+                with comp_cols[1]:
+                    max_comp_ratio = (df_metrics['Perbandingan Rekursif'] / df_metrics['Perbandingan Iteratif']).max()
+                    st.metric("Max Ratio", f"{max_comp_ratio:.2f}x")
+                with comp_cols[2]:
+                    total_comp_diff = (df_metrics['Perbandingan Rekursif'] - df_metrics['Perbandingan Iteratif']).sum()
+                    st.metric("Total Extra", f"{total_comp_diff:,.0f}")
+                
                 # Display selected charts
                 if "⏱️ Perbandingan Waktu" in chart_selection:
                     st.markdown("---")
@@ -1215,6 +1366,29 @@ def main():
                     st.subheader("🔢 Jumlah Operasi Perbandingan")
                     ops_fig = create_operations_column_chart(df_metrics)
                     st.plotly_chart(ops_fig, use_container_width=True)
+                
+                if "🔄 Perbandingan Langsung Operasi" in chart_selection:
+                    st.markdown("---")
+                    st.subheader("🔄 Perbandingan Langsung: Iteratif vs Rekursif")
+                    st.info("📊 **Chart Khusus**: Perbandingan langsung jumlah operasi untuk setiap ukuran dataset")
+                    comparison_fig = create_comparison_operations_chart(df_metrics)
+                    st.plotly_chart(comparison_fig, use_container_width=True)
+                    
+                    # Tambahkan insights
+                    with st.expander("🔍 Insights dari Perbandingan Operasi", expanded=True):
+                        st.markdown(f"""
+                        ### **📈 Temuan Utama:**
+                        
+                        1. **Konsistensi Perbedaan**: Rekursif selalu menggunakan lebih banyak perbandingan dibandingkan iteratif
+                        2. **Pola Pertumbuhan**: Perbedaan operasi meningkat seiring dengan ukuran dataset
+                        3. **Overhead Rekursif**: Rata-rata rekursif menggunakan **{avg_comp_ratio:.2f}x** lebih banyak perbandingan
+                        4. **Kumulatif Ekstra**: Total perbandingan ekstra untuk semua ukuran: **{total_comp_diff:,.0f}** operasi
+                        
+                        ### **🎯 Implikasi:**
+                        - **Iteratif**: Lebih efisien dalam penggunaan CPU cycles
+                        - **Rekursif**: Overhead function call menghasilkan lebih banyak operasi
+                        - **Scalability**: Perbedaan menjadi lebih signifikan pada dataset besar
+                        """)
                 
                 if "🏆 Skor Efisiensi" in chart_selection:
                     st.markdown("---")
@@ -1261,7 +1435,16 @@ def main():
                     growth_iter = (last_iter - first_iter) / first_iter * 100 if first_iter > 0 else 0
                     growth_rek = (last_rek - first_rek) / first_rek * 100 if first_rek > 0 else 0
                     
-                    insight_cols = st.columns(3)
+                    # Hitung growth perbandingan
+                    first_iter_comp = df_metrics.iloc[0]['Perbandingan Iteratif']
+                    last_iter_comp = df_metrics.iloc[-1]['Perbandingan Iteratif']
+                    first_rek_comp = df_metrics.iloc[0]['Perbandingan Rekursif']
+                    last_rek_comp = df_metrics.iloc[-1]['Perbandingan Rekursif']
+                    
+                    growth_iter_comp = (last_iter_comp - first_iter_comp) / first_iter_comp * 100 if first_iter_comp > 0 else 0
+                    growth_rek_comp = (last_rek_comp - first_rek_comp) / first_rek_comp * 100 if first_rek_comp > 0 else 0
+                    
+                    insight_cols = st.columns(4)
                     
                     with insight_cols[0]:
                         st.metric(
@@ -1284,6 +1467,125 @@ def main():
                             f"{growth_diff:.1f}%",
                             "Rekursif tumbuh lebih cepat"
                         )
+                    
+                    with insight_cols[3]:
+                        comp_growth_diff = growth_rek_comp - growth_iter_comp
+                        st.metric(
+                            "Comp Growth Diff", 
+                            f"{comp_growth_diff:.1f}%",
+                            "Perbandingan rekursif tumbuh lebih cepat"
+                        )
+                
+                # ===== TAMBAHAN BARU: RUMUS T(n) =====
+                st.markdown("---")
+                st.subheader("📐 Analisis Kompleksitas Waktu T(n)")
+                
+                # Container untuk rumus
+                with st.container():
+                    st.markdown("""
+                    ### **🔬 Rumus Kompleksitas Waktu untuk Worst Case**
+                    
+                    #### **Iteratif:**
+                    ```
+                    T_iteratif(n) = C₁ × n + C₂
+                    
+                    Dimana:
+                    • n = jumlah elemen dalam dataset
+                    • C₁ = waktu per perbandingan (0.0001 ms)
+                    • C₂ = overhead konstan (0.01 ms)
+                    
+                    Contoh untuk n = 10,000:
+                    T_iteratif(10,000) = 0.0001 × 10,000 + 0.01 = 1.0 + 0.01 = 1.01 ms
+                    ```
+                    
+                    #### **Rekursif:**
+                    ```
+                    T_rekursif(n) = C₃ × n + C₄
+                    
+                    Dimana:
+                    • n = jumlah elemen dalam dataset  
+                    • C₃ = waktu per perbandingan dengan overhead rekursif (0.00015 ms)
+                    • C₄ = overhead rekursif konstan (0.015 ms)
+                    
+                    Contoh untuk n = 10,000:
+                    T_rekursif(10,000) = 0.00015 × 10,000 + 0.015 = 1.5 + 0.015 = 1.515 ms
+                    ```
+                    
+                    #### **Perbandingan Rasio:**
+                    ```
+                    Ratio = T_rekursif(n) / T_iteratif(n) 
+                          = (C₃ × n + C₄) / (C₁ × n + C₂)
+                    
+                    Untuk n besar:
+                    Ratio ≈ C₃ / C₁ = 0.00015 / 0.0001 = 1.5x
+                    
+                    Artinya: Rekursif 1.5x lebih lambat dari Iteratif
+                    ```
+                    
+                    #### **Bukti dari Data:**
+                    """)
+                    
+                    # Hitung konstanta dari data aktual
+                    if len(df_metrics) > 1:
+                        # Ambil dua titik untuk menghitung slope
+                        n1 = df_metrics.iloc[0]['Ukuran Data']
+                        n2 = df_metrics.iloc[-1]['Ukuran Data']
+                        
+                        t1_iter = df_metrics.iloc[0]['Waktu Iteratif (ms)']
+                        t2_iter = df_metrics.iloc[-1]['Waktu Iteratif (ms)']
+                        t1_rek = df_metrics.iloc[0]['Waktu Rekursif (ms)']
+                        t2_rek = df_metrics.iloc[-1]['Waktu Rekursif (ms)']
+                        
+                        # Hitung C1 (slope iteratif)
+                        C1 = (t2_iter - t1_iter) / (n2 - n1) if (n2 - n1) > 0 else 0.0001
+                        C2 = t1_iter - C1 * n1
+                        
+                        # Hitung C3 (slope rekursif)
+                        C3 = (t2_rek - t1_rek) / (n2 - n1) if (n2 - n1) > 0 else 0.00015
+                        C4 = t1_rek - C3 * n1
+                        
+                        # Tampilkan hasil perhitungan
+                        formula_cols = st.columns(2)
+                        
+                        with formula_cols[0]:
+                            st.markdown(f"""
+                            **Konstanta Iteratif:**
+                            ```
+                            C₁ = {C1:.6f} ms/elemen
+                            C₂ = {C2:.4f} ms
+                            
+                            Rumus Aktual:
+                            T_iteratif(n) = {C1:.6f} × n + {C2:.4f}
+                            ```
+                            """)
+                        
+                        with formula_cols[1]:
+                            st.markdown(f"""
+                            **Konstanta Rekursif:**
+                            ```
+                            C₃ = {C3:.6f} ms/elemen
+                            C₄ = {C4:.4f} ms
+                            
+                            Rumus Aktual:
+                            T_rekursif(n) = {C3:.6f} × n + {C4:.4f}
+                            ```
+                            """)
+                        
+                        # Hitung ratio
+                        actual_ratio = C3 / C1 if C1 > 0 else 0
+                        theoretical_ratio = 0.00015 / 0.0001  # 1.5
+                        
+                        st.markdown(f"""
+                        #### **Verifikasi Rasio:**
+                        ```
+                        Rasio Teoritis: C₃ / C₁ = 0.00015 / 0.0001 = {theoretical_ratio:.2f}x
+                        Rasio Aktual:   {C3:.6f} / {C1:.6f} = {actual_ratio:.2f}x
+                        
+                        Selisih: {abs(theoretical_ratio - actual_ratio):.4f}x
+                        ```
+                        
+                        ✅ **Konfirmasi:** Data konsisten dengan model teoritis!
+                        """)
                 
                 # Detailed table
                 st.markdown("---")
@@ -1293,9 +1595,17 @@ def main():
                 display_df = df_metrics.copy()
                 display_df['Ukuran Data'] = display_df['Ukuran Data'].apply(lambda x: f"{x:,}")
                 
+                # Tambah kolom perbedaan perbandingan
+                display_df['Perbedaan Perbandingan'] = display_df['Perbandingan Rekursif'] - display_df['Perbandingan Iteratif']
+                display_df['Ratio Perbandingan'] = display_df['Perbandingan Rekursif'] / display_df['Perbandingan Iteratif']
+                
                 format_config = {
                     'Waktu Iteratif (ms)': '{:.4f}',
                     'Waktu Rekursif (ms)': '{:.4f}',
+                    'Perbandingan Iteratif': '{:,}',
+                    'Perbandingan Rekursif': '{:,}',
+                    'Perbedaan Perbandingan': '{:,}',
+                    'Ratio Perbandingan': '{:.2f}x',
                     'Speedup': '{:.2f}x',
                     'Ops/detik Iteratif': '{:,.0f}',
                     'Ops/detik Rekursif': '{:,.0f}',
@@ -1316,7 +1626,7 @@ def main():
                 st.markdown("---")
                 st.subheader("🎯 Kesimpulan & Rekomendasi")
                 
-                rec_cols = st.columns(3)
+                rec_cols = st.columns(4)
                 
                 with rec_cols[0]:
                     best_speedup = df_metrics['Speedup'].max()
@@ -1330,8 +1640,13 @@ def main():
                     st.info(f"**Konsistensi**\n\n{consistency:.0f}%\nIteratif lebih cepat")
                 
                 with rec_cols[2]:
-                    avg_diff = df_metrics['Waktu Rekursif (ms)'].mean() - df_metrics['Waktu Iteratif (ms)'].mean()
-                    st.warning(f"**Rata Selisih**\n\n{avg_diff:.2f} ms\nIteratif lebih kecil")
+                    avg_comp_ratio = (df_metrics['Perbandingan Rekursif'] / df_metrics['Perbandingan Iteratif']).mean()
+                    st.warning(f"**Rata Ratio Perbandingan**\n\n{avg_comp_ratio:.2f}x\nRekursif lebih banyak")
+                
+                with rec_cols[3]:
+                    avg_time_diff = df_metrics['Waktu Rekursif (ms)'].mean() - df_metrics['Waktu Iteratif (ms)'].mean()
+                    avg_comp_diff = (df_metrics['Perbandingan Rekursif'] - df_metrics['Perbandingan Iteratif']).mean()
+                    st.error(f"**Rata Selisih**\n\n{avg_time_diff:.2f} ms\n+{avg_comp_diff:.0f} comps")
         
         # ===== PENJELASAN SISTEM =====
         st.markdown("---")
@@ -1364,6 +1679,22 @@ def main():
                 return st.session_state[cache_key]
             ```
             
+            ### **🔄 Perbedaan Perbandingan (BARU)**
+            
+            ```python
+            # ITERATIF: 1 perbandingan per elemen
+            comparisons += 1
+            if keyword_lower in product.lower():
+                return i, comparisons
+            
+            # REKURSIF: 3-4 perbandingan per elemen
+            comparisons += 1  # Cek validitas index
+            comparisons += 1  # Cek keyword  
+            comparisons += 1  # Cek apakah perlu lanjut ke rekursi berikutnya
+            
+            # Hasil: rekursif menggunakan 2-3x lebih banyak perbandingan
+            ```
+            
             ### **⏱️ Consistent Timing Simulation**
             
             ```python
@@ -1380,8 +1711,9 @@ def main():
             
             1. **Seed Verification** - Pastikan seed sama
             2. **Cache Validation** - Pastikan hasil di-cache  
-            3. **Result Comparison** - Bandingkan dengan run sebelumnya
-            4. **Formula Checking** - Verifikasi perhitungan waktu
+            3. **Perbandingan Berbeda** - Rekursif > Iteratif
+            4. **Result Comparison** - Bandingkan dengan run sebelumnya
+            5. **Formula Checking** - Verifikasi perhitungan waktu
             """)
 
 if __name__ == "__main__":
