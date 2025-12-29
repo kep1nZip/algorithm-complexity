@@ -575,12 +575,10 @@ def main():
                 with summary_cols[0]:
                     avg_time_iter = df_metrics['Waktu Iteratif (ms)'].mean()
                     st.metric("Rata Waktu Iteratif", f"{avg_time_iter:.4f} ms")
-                    st.caption(f"Min: {df_metrics['Waktu Iteratif (ms)'].min():.4f} ms, Max: {df_metrics['Waktu Iteratif (ms)'].max():.4f} ms")
                 
                 with summary_cols[1]:
                     avg_time_rek = df_metrics['Waktu Rekursif (ms)'].mean()
                     st.metric("Rata Waktu Rekursif", f"{avg_time_rek:.4f} ms")
-                    st.caption(f"Min: {df_metrics['Waktu Rekursif (ms)'].min():.4f} ms, Max: {df_metrics['Waktu Rekursif (ms)'].max():.4f} ms")
                 
                 # Info konsistensi
                 cache_key = f"perf_results_{'_'.join(map(str, sorted(test_sizes)))}_{keyword}"
@@ -609,117 +607,6 @@ def main():
                     trend_fig = create_performance_trend_chart(df_metrics)
                     st.plotly_chart(trend_fig, use_container_width=True)
                 
-                # Insights
-                if len(df_metrics) > 1:
-                    st.markdown("---")
-                    st.subheader("📈 Analisis Pertumbuhan")
-                    
-                    # Hitung growth rates
-                    first_iter = df_metrics.iloc[0]['Waktu Iteratif (ms)']
-                    last_iter = df_metrics.iloc[-1]['Waktu Iteratif (ms)']
-                    first_rek = df_metrics.iloc[0]['Waktu Rekursif (ms)']
-                    last_rek = df_metrics.iloc[-1]['Waktu Rekursif (ms)']
-                    
-                    growth_iter = (last_iter - first_iter) / first_iter * 100 if first_iter > 0 else 0
-                    growth_rek = (last_rek - first_rek) / first_rek * 100 if first_rek > 0 else 0
-                    
-                    insight_cols = st.columns(2)
-                    
-                    with insight_cols[0]:
-                        st.metric(
-                            "Pertumbuhan Iteratif", 
-                            f"{growth_iter:.1f}%",
-                            f"{first_iter:.4f}ms → {last_iter:.4f}ms"
-                        )
-                    
-                    with insight_cols[1]:
-                        st.metric(
-                            "Pertumbuhan Rekursif", 
-                            f"{growth_rek:.1f}%",
-                            f"{first_rek:.4f}ms → {last_rek:.4f}ms"
-                        )
-                
-                # ===== ANALISIS KOMPLEKSITAS =====
-                st.markdown("---")
-                st.subheader("📐 Analisis Kompleksitas Waktu T(n)")
-                
-                with st.container():
-                    st.markdown("""
-                    ### **🔬 Rumus Kompleksitas Waktu**
-                    
-                    #### **Linear Search Iteratif:**
-                    ```
-                    T_iteratif(n) = C₁ × k + C₂
-                    
-                    Dimana:
-                    • k = jumlah perbandingan = n (worst case)
-                    • C₁ = waktu per perbandingan (0.0001 ms)
-                    • C₂ = overhead konstan (0.01 ms)
-                    ```
-                    
-                    #### **Linear Search Rekursif:**
-                    ```
-                    T_rekursif(n) = C₃ × k + C₄
-                    
-                    Dimana:
-                    • k = jumlah perbandingan = n (worst case) - SAMA dengan iteratif
-                    • C₃ = waktu per perbandingan dengan overhead rekursif (0.00015 ms)
-                    • C₄ = overhead rekursif konstan (0.015 ms)
-                    ```
-                    
-                    #### **Perbedaan:**
-                    ```
-                    • Jumlah perbandingan (k) SAMA untuk kedua algoritma
-                    • Waktu berbeda karena C₃ > C₁ (overhead function call)
-                    • Overhead rekursif: C₄ > C₂
-                    ```
-                    """)
-                    
-                    # Hitung konstanta dari data aktual
-                    if len(df_metrics) > 1:
-                        # Ambil dua titik untuk menghitung slope
-                        n1 = df_metrics.iloc[0]['Ukuran Data']
-                        n2 = df_metrics.iloc[-1]['Ukuran Data']
-                        
-                        t1_iter = df_metrics.iloc[0]['Waktu Iteratif (ms)']
-                        t2_iter = df_metrics.iloc[-1]['Waktu Iteratif (ms)']
-                        t1_rek = df_metrics.iloc[0]['Waktu Rekursif (ms)']
-                        t2_rek = df_metrics.iloc[-1]['Waktu Rekursif (ms)']
-                        
-                        # Hitung C1 (slope iteratif)
-                        C1 = (t2_iter - t1_iter) / (n2 - n1) if (n2 - n1) > 0 else 0.0001
-                        C2 = t1_iter - C1 * n1
-                        
-                        # Hitung C3 (slope rekursif)
-                        C3 = (t2_rek - t1_rek) / (n2 - n1) if (n2 - n1) > 0 else 0.00015
-                        C4 = t1_rek - C3 * n1
-                        
-                        # Tampilkan hasil perhitungan
-                        formula_cols = st.columns(2)
-                        
-                        with formula_cols[0]:
-                            st.markdown(f"""
-                            **Konstanta Iteratif:**
-                            ```
-                            C₁ = {C1:.6f} ms/elemen
-                            C₂ = {C2:.4f} ms
-                            
-                            Rumus Aktual:
-                            T_iteratif(n) = {C1:.6f} × n + {C2:.4f}
-                            ```
-                            """)
-                        
-                        with formula_cols[1]:
-                            st.markdown(f"""
-                            **Konstanta Rekursif:**
-                            ```
-                            C₃ = {C3:.6f} ms/elemen
-                            C₄ = {C4:.4f} ms
-                            
-                            Rumus Aktual:
-                            T_rekursif(n) = {C3:.6f} × n + {C4:.4f}
-                            ```
-                            """)
                 
                 # Detailed table
                 st.markdown("---")
@@ -762,8 +649,6 @@ def main():
                     **Perbedaan Waktu:**
                     
                     **{avg_time_diff:.4f} ms**
-                    
-                    Rekursif lebih lambat karena overhead function call
                     """)
                 
                 with conclusion_cols[1]:
